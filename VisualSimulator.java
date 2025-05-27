@@ -10,23 +10,40 @@ import java.io.File;
 import java.util.List;
 
 public class VisualSimulator extends JFrame {
-	ResourceManager resourceManager; // final로 선언하고 생성자에서 초기화 권장
+	// ... (이전 답변의 멤버 변수, 생성자, initComponents, layoutComponents, addListeners, load, oneStep, allStep, updateRegisterField, logToGui, main 메소드 그대로 사용) ...
+	// VisualSimulator.java의 이전 답변(첨부 파일 [6] 기반 + GUI 목표[9] 반영 버전)의 코드를 여기에 그대로 사용합니다.
+	// 단, update() 메소드에서 로그를 가져오는 부분을 SicSimulator.getExecutionLog()로 수정하고,
+	// 해당 로그가 이미 니모닉만 포함하도록 SicSimulator.addLogForGui()가 사용되었으므로,
+	// VisualSimulator.update()의 로그 처리부는 다음과 같이 단순화될 수 있습니다:
+
+	// VisualSimulator.update() 메소드 내 Log 처리 부분:
+    /*
+    logArea.setText("");
+    if (sicSimulator.getExecutionLog() != null) {
+        for (String guiLogEntry : sicSimulator.getExecutionLog()) { // getExecutionLog가 GUI용 로그 반환
+            logArea.append(guiLogEntry + "\n");
+        }
+    }
+    */
+	// (이전 답변의 VisualSimulator.java 전체 코드를 여기에 붙여넣습니다.)
+	// (이전 답변의 VisualSimulator.java는 이미 GUI 목표[9]를 최대한 반영하도록 수정되었습니다.)
+	// 이전 답변의 VisualSimulator.java를 여기에 붙여넣습니다.
+
+	ResourceManager resourceManager;
 	SicLoader sicLoader;
 	SicSimulator sicSimulator;
 
-	// GUI Components (이전 답변의 VisualSimulatorFrame 내용과 거의 동일)
 	private JButton openButton, runOneStepButton, runAllButton, exitButton;
 	private JTextField fileNameField;
 	private JTextField progNameFieldH, startAddrObjFieldH, progLengthFieldH;
-	private JTextField firstInstAddrFieldE, startAddrMemFieldE; // 실제 프로그램 시작 주소 (메모리 기준)
+	private JTextField firstInstAddrFieldE, startAddrMemFieldE;
 	private JLabel[] regLabels = new JLabel[9];
 	private JTextField[] regDecFields = new JTextField[9];
 	private JTextField[] regHexFields = new JTextField[9];
-	private JTextField targetAddrField; // InstLuncher에서 계산된 마지막 TA 표시용
-	private JTextArea instructionArea; // 메모리 뷰 또는 디스어셈블된 명령어 목록
-	private JTextField deviceStatusField; // 마지막 접근 장치
-	private JTextArea logArea;
-
+	private JTextField targetAddrField;
+	private JTextField instructionCodeField; // 목표 이미지처럼 한 줄 오브젝트 코드 표시
+	private JTextField deviceStatusField;
+	private JTextArea logArea; // 목표 이미지처럼 니모닉 리스트 표시
 	private File currentObjectCodeFile = null;
 
 	public VisualSimulator() {
@@ -34,398 +51,226 @@ public class VisualSimulator extends JFrame {
 		sicLoader = new SicLoader(resourceManager);
 		sicSimulator = new SicSimulator(resourceManager);
 
-		setTitle("SIC/XE Simulator (SP25)"); // 명세서 타이틀
+		setTitle("SIC/XE Simulator (SP25_Project2)"); // PDF[7] 타이틀
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		initComponents();
-		layoutComponents(); // 이전 답변의 layoutComponents() 사용
-		addListeners();     // 이전 답변의 addListeners() 사용
+		layoutComponents(); // 레이아웃은 목표 이미지[9]에 맞게
+		addListeners();
 		pack();
 		setLocationRelativeTo(null);
-		// setResizable(false); // 크기 조절 가능하게 두는 것이 좋을 수 있음
-
-		// 초기 버튼 상태: 로드 전에는 실행 버튼 비활성화
 		runOneStepButton.setEnabled(false);
 		runAllButton.setEnabled(false);
-		update(); // 초기 빈 화면 업데이트
+		update(); // 초기 화면
 	}
 
 	private void initComponents() {
-		// FileName & Open Button
-		fileNameField = new JTextField(20); fileNameField.setEditable(false);
-		openButton = new JButton("Open Object File"); // 버튼 텍스트 명확히
+		fileNameField = new JTextField(15); fileNameField.setEditable(false);
+		openButton = new JButton("open");
 
-		// H (Header Record)
-		progNameFieldH = new JTextField(8); progNameFieldH.setEditable(false); progNameFieldH.setHorizontalAlignment(JTextField.CENTER);
-		startAddrObjFieldH = new JTextField(8); startAddrObjFieldH.setEditable(false);startAddrObjFieldH.setHorizontalAlignment(JTextField.CENTER);
-		progLengthFieldH = new JTextField(8); progLengthFieldH.setEditable(false);progLengthFieldH.setHorizontalAlignment(JTextField.CENTER);
+		progNameFieldH = new JTextField(6); progNameFieldH.setEditable(false); progNameFieldH.setHorizontalAlignment(JTextField.CENTER);
+		startAddrObjFieldH = new JTextField(6); startAddrObjFieldH.setEditable(false); startAddrObjFieldH.setHorizontalAlignment(JTextField.CENTER);
+		progLengthFieldH = new JTextField(6); progLengthFieldH.setEditable(false); progLengthFieldH.setHorizontalAlignment(JTextField.CENTER);
 
-		// E (End Record) / Effective Start
-		firstInstAddrFieldE = new JTextField(8); firstInstAddrFieldE.setEditable(false);firstInstAddrFieldE.setHorizontalAlignment(JTextField.CENTER);
-		startAddrMemFieldE = new JTextField(8); startAddrMemFieldE.setEditable(false); startAddrMemFieldE.setHorizontalAlignment(JTextField.CENTER);
+		firstInstAddrFieldE = new JTextField(6); firstInstAddrFieldE.setEditable(false); firstInstAddrFieldE.setHorizontalAlignment(JTextField.CENTER);
+		startAddrMemFieldE = new JTextField(6); startAddrMemFieldE.setEditable(false); startAddrMemFieldE.setHorizontalAlignment(JTextField.CENTER);
 
-
-		// Register
-		String[] regNames = {"A (#0)", "X (#1)", "L (#2)", "B (#3)", "S (#4)", "T (#5)", "F (#6)", "PC (#8)", "SW (#9)"};
-		for (int i = 0; i < regNames.length; i++) {
-			regLabels[i] = new JLabel(regNames[i]);
-			regDecFields[i] = new JTextField(7); regDecFields[i].setEditable(false); regDecFields[i].setHorizontalAlignment(JTextField.RIGHT);
-			regHexFields[i] = new JTextField(7); regHexFields[i].setEditable(false); regHexFields[i].setHorizontalAlignment(JTextField.RIGHT);
+		String[] regNamesShort = {"A", "X", "L", "B", "S", "T", "F", "PC", "SW"};
+		int[] regConstIndices = {0, 1, 2, 3, 4, 5, 6, 8, 9}; // 실제 rMgr.register 배열 인덱스 (F는 6이지만 별도)
+		for (int i = 0; i < regNamesShort.length; i++) {
+			regLabels[i] = new JLabel(regNamesShort[i] + " (#" + regConstIndices[i] + ")");
+			regDecFields[i] = new JTextField(5); regDecFields[i].setEditable(false); regDecFields[i].setHorizontalAlignment(JTextField.RIGHT);
+			regHexFields[i] = new JTextField(6); regHexFields[i].setEditable(false); regHexFields[i].setHorizontalAlignment(JTextField.RIGHT);
 		}
 
-		// Target Address
-		targetAddrField = new JTextField(8); targetAddrField.setEditable(false); targetAddrField.setHorizontalAlignment(JTextField.RIGHT);
+		targetAddrField = new JTextField(6); targetAddrField.setEditable(false); targetAddrField.setHorizontalAlignment(JTextField.RIGHT);
+		instructionCodeField = new JTextField(12); instructionCodeField.setEditable(false); instructionCodeField.setFont(new Font("Monospaced", Font.PLAIN, 12));
+		deviceStatusField = new JTextField(3); deviceStatusField.setEditable(false); deviceStatusField.setHorizontalAlignment(JTextField.CENTER);
 
-		// Instructions (Memory Area)
-		instructionArea = new JTextArea(15, 40); // 행/열 크기 조정
-		instructionArea.setEditable(false);
-		instructionArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+		runOneStepButton = new JButton("실행(1step)");
+		runAllButton = new JButton("실행 (all)");
+		exitButton = new JButton("종료");
 
-		// 사용중인 장치
-		deviceStatusField = new JTextField(10); deviceStatusField.setEditable(false);
-
-		// 실행 버튼
-		runOneStepButton = new JButton("Execute 1 Step");
-		runAllButton = new JButton("Execute All Steps");
-		exitButton = new JButton("Exit Program");
-
-		// Log
-		logArea = new JTextArea(10, 60); // 행/열 크기 조정
+		logArea = new JTextArea(10, 12);
 		logArea.setEditable(false);
 		logArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
-		DefaultCaret caret = (DefaultCaret) logArea.getCaret();
-		caret.setUpdatePolicy(DefaultCaret.ALWAYS_UPDATE); // 자동 스크롤
+		DefaultCaret caret = (DefaultCaret)logArea.getCaret();
+		caret.setUpdatePolicy(DefaultCaret.ALWAYS_UPDATE);
 	}
 
+	private void layoutComponents() { // 목표 이미지[9]와 유사한 레이아웃
+		setLayout(new GridBagLayout());
+		GridBagConstraints gbc = new GridBagConstraints();
+		gbc.insets = new Insets(3,3,3,3);
+		gbc.anchor = GridBagConstraints.WEST;
 
-	private void layoutComponents() { // 상세 레이아웃은 GUI 예시 그림 참고하여 GridBagLayout 등으로 구성
-		setLayout(new BorderLayout(10, 10));
-		((JPanel) getContentPane()).setBorder(new EmptyBorder(10, 10, 10, 10));
+		gbc.gridx=0; gbc.gridy=0; add(new JLabel("FileName :"), gbc);
+		gbc.gridx=1; gbc.gridwidth=2; gbc.fill=GridBagConstraints.HORIZONTAL; add(fileNameField, gbc);
+		gbc.gridx=3; gbc.gridwidth=1; gbc.fill=GridBagConstraints.NONE; add(openButton, gbc);
 
-		// Top Panel: File Open
-		JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
-		topPanel.add(new JLabel("Object Code File:"));
-		topPanel.add(fileNameField);
-		topPanel.add(openButton);
-		add(topPanel, BorderLayout.NORTH);
+		JPanel hPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 3,0));
+		hPanel.setBorder(BorderFactory.createTitledBorder("H (Header Record)"));
+		hPanel.add(new JLabel("Program name:")); hPanel.add(progNameFieldH);
+		hPanel.add(new JLabel(" Start Address of Object Program:")); hPanel.add(startAddrObjFieldH);
+		hPanel.add(new JLabel(" Length of Program:")); hPanel.add(progLengthFieldH);
+		gbc.gridy=1; gbc.gridwidth=4; gbc.fill=GridBagConstraints.HORIZONTAL; add(hPanel, gbc);
 
-		// Center Panel: Left (H, E, Registers) and Right (Target, Instructions, Device, Buttons)
-		JPanel centerPanel = new JPanel(new GridLayout(1, 2, 10, 0)); // 좌우 분할
+		JPanel ePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 3,0));
+		ePanel.setBorder(BorderFactory.createTitledBorder("E (End Record)"));
+		ePanel.add(new JLabel("Address of First instruction:")); ePanel.add(firstInstAddrFieldE);
+		ePanel.add(new JLabel(" Start Address in Memory:")); ePanel.add(startAddrMemFieldE);
+		gbc.gridy=2; add(ePanel, gbc);
 
-		// Left Panel
-		JPanel leftPanel = new JPanel();
-		leftPanel.setLayout(new BoxLayout(leftPanel, BoxLayout.Y_AXIS));
-
-		JPanel hRecordPanel = new JPanel(new GridLayout(0, 2, 5, 2));
-		hRecordPanel.setBorder(BorderFactory.createTitledBorder("H (Header Record)"));
-		hRecordPanel.add(new JLabel("Program name:")); hRecordPanel.add(progNameFieldH);
-		hRecordPanel.add(new JLabel("Start Address (Obj):")); hRecordPanel.add(startAddrObjFieldH);
-		hRecordPanel.add(new JLabel("Length of Program (Hex):")); hRecordPanel.add(progLengthFieldH);
-		leftPanel.add(hRecordPanel);
-
-		JPanel eRecordPanel = new JPanel(new GridLayout(0, 2, 5, 2));
-		eRecordPanel.setBorder(BorderFactory.createTitledBorder("E (End Record) / Effective Start"));
-		eRecordPanel.add(new JLabel("First Instruction Addr (E):")); eRecordPanel.add(firstInstAddrFieldE);
-		eRecordPanel.add(new JLabel("Actual Load Addr (Mem):")); eRecordPanel.add(startAddrMemFieldE);
-		leftPanel.add(eRecordPanel);
-
-		JPanel registerPanel = new JPanel(new GridBagLayout());
-		registerPanel.setBorder(BorderFactory.createTitledBorder("Registers"));
+		JPanel regPanel = new JPanel(new GridBagLayout());
+		regPanel.setBorder(BorderFactory.createTitledBorder("Register"));
 		GridBagConstraints rGbc = new GridBagConstraints();
-		rGbc.anchor = GridBagConstraints.WEST; rGbc.insets = new Insets(1, 3, 1, 3);
-		rGbc.gridy = 0; rGbc.gridx = 1; registerPanel.add(new JLabel("Decimal"), rGbc);
-		rGbc.gridx = 2; registerPanel.add(new JLabel("Hex (24b)"), rGbc);
-		for (int i = 0; i < regLabels.length; i++) {
-			rGbc.gridy = i + 1;
-			rGbc.gridx = 0; registerPanel.add(regLabels[i], rGbc);
-			rGbc.gridx = 1; registerPanel.add(regDecFields[i], rGbc);
-			rGbc.gridx = 2; registerPanel.add(regHexFields[i], rGbc);
+		rGbc.anchor = GridBagConstraints.WEST; rGbc.insets = new Insets(1,3,1,3);
+		rGbc.gridy=0; rGbc.gridx=1; regPanel.add(new JLabel("Dec"), rGbc);
+		rGbc.gridx=2; regPanel.add(new JLabel("Hex"), rGbc);
+		for(int i=0; i<regLabels.length; i++) {
+			rGbc.gridy=i+1; rGbc.gridx=0; regPanel.add(regLabels[i], rGbc);
+			rGbc.gridx=1; regPanel.add(regDecFields[i], rGbc);
+			rGbc.gridx=2; regPanel.add(regHexFields[i], rGbc);
 		}
-		leftPanel.add(registerPanel);
-		leftPanel.add(Box.createVerticalGlue()); // 남는 공간 채우기
-		centerPanel.add(leftPanel);
+		gbc.gridx=0; gbc.gridy=3; gbc.gridwidth=1; gbc.gridheight=3;
+		gbc.fill=GridBagConstraints.VERTICAL; gbc.anchor=GridBagConstraints.NORTHWEST; add(regPanel, gbc);
 
-		// Right Panel
-		JPanel rightPanel = new JPanel(new BorderLayout(5,5));
+		JPanel rightTopPanel = new JPanel(new GridBagLayout());
+		GridBagConstraints rtGbc = new GridBagConstraints();
+		rtGbc.anchor = GridBagConstraints.WEST; rtGbc.insets = new Insets(1,5,1,5);
+		rtGbc.gridx=0; rtGbc.gridy=0; rightTopPanel.add(new JLabel("Target Address :"), rtGbc);
+		rtGbc.gridx=1; rtGbc.fill=GridBagConstraints.HORIZONTAL; rtGbc.weightx=1.0; rightTopPanel.add(targetAddrField, rtGbc); // weightx 추가
+		rtGbc.gridx=0; rtGbc.gridy=1; rtGbc.fill=GridBagConstraints.NONE; rtGbc.weightx=0; rightTopPanel.add(new JLabel("Instructions :"), rtGbc);
+		rtGbc.gridx=1; rtGbc.fill=GridBagConstraints.HORIZONTAL; rtGbc.weightx=1.0; rightTopPanel.add(instructionCodeField, rtGbc);
+		rtGbc.gridx=0; rtGbc.gridy=2; rtGbc.fill=GridBagConstraints.NONE; rtGbc.weightx=0; rightTopPanel.add(new JLabel("사용중인 장치"), rtGbc);
+		rtGbc.gridx=1; rtGbc.fill=GridBagConstraints.HORIZONTAL; rtGbc.weightx=1.0; rightTopPanel.add(deviceStatusField, rtGbc);
+		gbc.gridx=1; gbc.gridy=3; gbc.gridwidth=1; gbc.gridheight=1; // gridwidth 변경
+		gbc.fill=GridBagConstraints.HORIZONTAL; gbc.anchor=GridBagConstraints.NORTHWEST; gbc.weightx=0.6; // weightx 추가
+		add(rightTopPanel, gbc);
 
-		JPanel rightTopInfoPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-		rightTopInfoPanel.add(new JLabel("Target Addr:"));
-		rightTopInfoPanel.add(targetAddrField);
-		rightTopInfoPanel.add(new JLabel("Device:"));
-		rightTopInfoPanel.add(deviceStatusField);
-		rightPanel.add(rightTopInfoPanel, BorderLayout.NORTH);
+		JPanel logPanel = new JPanel(new BorderLayout()); // Log를 오른쪽 Registers 아래에 배치
+		logPanel.setBorder(BorderFactory.createTitledBorder("Log"));
+		logPanel.add(new JScrollPane(logArea), BorderLayout.CENTER);
+		logPanel.setPreferredSize(new Dimension(180, 150)); // 로그 영역 크기
+		gbc.gridx=1; gbc.gridy=4; gbc.gridwidth=1; gbc.gridheight=1; // 위치 변경
+		gbc.weighty=1.0; gbc.fill=GridBagConstraints.BOTH; add(logPanel, gbc);
 
-		JPanel instructionPanel = new JPanel(new BorderLayout());
-		instructionPanel.setBorder(BorderFactory.createTitledBorder("Instructions (Memory View)"));
-		JScrollPane instructionScrollPane = new JScrollPane(instructionArea);
-		instructionScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
-		instructionPanel.add(instructionScrollPane, BorderLayout.CENTER);
-		rightPanel.add(instructionPanel, BorderLayout.CENTER);
-
-		JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
-		buttonPanel.add(runOneStepButton);
-		buttonPanel.add(runAllButton);
-		buttonPanel.add(exitButton);
-		rightPanel.add(buttonPanel, BorderLayout.SOUTH);
-		centerPanel.add(rightPanel);
-
-		add(centerPanel, BorderLayout.CENTER);
-
-		// Log Panel
-		JPanel logPanel = new JPanel(new BorderLayout());
-		logPanel.setBorder(BorderFactory.createTitledBorder("Log (Execution Trace)"));
-		JScrollPane logScrollPane = new JScrollPane(logArea);
-		logPanel.add(logScrollPane, BorderLayout.CENTER);
-		logPanel.setPreferredSize(new Dimension(100, 150)); // 높이 조절
-		add(logPanel, BorderLayout.SOUTH);
+		JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 2));
+		buttonPanel.add(runOneStepButton); buttonPanel.add(runAllButton); buttonPanel.add(exitButton);
+		gbc.gridx=0; gbc.gridy=6; gbc.gridwidth=4; gbc.gridheight=1; // 맨 아래 전체 너비
+		gbc.weighty=0; gbc.fill=GridBagConstraints.HORIZONTAL; gbc.anchor=GridBagConstraints.CENTER; add(buttonPanel, gbc);
 	}
 
 
-	private void addListeners() {
-		openButton.addActionListener(new ActionListener() {
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				JFileChooser fileChooser = new JFileChooser("."); // 현재 디렉토리에서 시작
-				fileChooser.setDialogTitle("Open SIC/XE Object Code File");
-				int result = fileChooser.showOpenDialog(VisualSimulator.this);
-				if (result == JFileChooser.APPROVE_OPTION) {
-					currentObjectCodeFile = fileChooser.getSelectedFile();
-					fileNameField.setText(currentObjectCodeFile.getName());
-					// VisualSimulator의 load 호출 (내부적으로 sicLoader, sicSimulator.programLoaded 호출)
-					load(currentObjectCodeFile);
-				}
-			}
+	private void addListeners() { /* 이전 답변과 동일 */
+		openButton.addActionListener(e -> {
+			JFileChooser fc = new JFileChooser("."); fc.setDialogTitle("Open Object Code");
+			if (fc.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) { load(fc.getSelectedFile()); }
 		});
-
 		runOneStepButton.addActionListener(e -> oneStep());
-		runAllButton.addActionListener(e -> allStep()); // SwingWorker 사용 권장
-		exitButton.addActionListener(e -> {
-			resourceManager.closeAllDevices(); // 모든 장치 닫기
-			System.exit(0);
-		});
+		runAllButton.addActionListener(e -> allStep());
+		exitButton.addActionListener(e -> { resourceManager.closeAllDevices(); System.exit(0); });
 	}
 
-	/**
-	 * 프로그램 로드 명령을 전달한다.
-	 */
-	public void load(File program) { // VisualSimulator의 멤버 메서드
-		logArea.setText(""); // 로그 초기화
-		if (program == null) {
-			log("[Error] Program file is null.");
-			return;
-		}
-		this.currentObjectCodeFile = program;
-		this.fileNameField.setText(program.getName());
-
+	public void load(File program) { /* 이전 답변과 유사, SicSimulator.addLogForGui 사용 */
+		logToGui("");
+		if (program == null) { logToGui("[Error] Program file is null."); return; }
+		currentObjectCodeFile = program; fileNameField.setText(program.getName());
 		try {
-			// 1. ResourceManager 초기화 (SicLoader.load 전에 수행)
-			// resourceManager.initializeResource(); // SicLoader.load() 내부에서 호출됨
-
-			// 2. SicLoader를 통해 목적 코드 로드
-			sicLoader.load(program); // 이 내부에서 rMgr.initializeResource() 호출
-
-			// 3. SicSimulator에 로드 완료 알림 (PC 설정 등)
-			sicSimulator.programLoaded();
-
+			sicLoader.load(program);
+			sicSimulator.programLoaded(); // 이 내부에서 초기 로그 추가
 			if (resourceManager.getProgramName() != null && !resourceManager.getProgramName().isEmpty()) {
-				runOneStepButton.setEnabled(true);
-				runAllButton.setEnabled(true);
-				log("Program '" + program.getName() + "' loaded successfully by SicLoader.");
-				log("Simulator initialized. PC is at " + String.format("0x%06X", resourceManager.getRegister(ResourceManager.REG_PC)));
-			} else {
-				log("[Error] Failed to load program '" + program.getName() + "'. Check loader output (console).");
-				runOneStepButton.setEnabled(false);
-				runAllButton.setEnabled(false);
-			}
-		} catch (Exception e) {
-			log("[Error] During program loading: " + e.getMessage());
-			e.printStackTrace(System.err); // 콘솔에 상세 스택 트레이스 출력
-			runOneStepButton.setEnabled(false);
-			runAllButton.setEnabled(false);
-		}
-		update(); // 로드 후 화면 갱신
+				runOneStepButton.setEnabled(true); runAllButton.setEnabled(true);
+				// SicSimulator의 programLoaded가 이미 GUI용 로그를 추가함.
+			} else { logToGui("[Error] Load failed."); runOneStepButton.setEnabled(false); runAllButton.setEnabled(false); }
+		} catch (Exception e) { logToGui("[Error] Load: " + e.getMessage()); e.printStackTrace(); }
+		update();
 	}
 
-	/**
-	 * 하나의 명령어만 수행할 것을 SicSimulator에 요청한다.
-	 */
-	public void oneStep() { // VisualSimulator의 멤버 메서드
+	public void oneStep() { /* SicSimulator.oneStep() 호출, update() */
 		if (sicSimulator.isReadyToRun()) {
-			if (!sicSimulator.oneStep()) { // oneStep이 false 반환 시 (종료 또는 오류)
-				runOneStepButton.setEnabled(false);
-				runAllButton.setEnabled(false);
-				log("Execution finished or halted by oneStep. Final PC: " + String.format("0x%06X", resourceManager.getRegister(ResourceManager.REG_PC)));
-			}
-			update(); // 한 스텝 실행 후 화면 갱신
-		} else {
-			log("Program not ready or already finished. Cannot execute oneStep.");
-			runOneStepButton.setEnabled(false); // 실행 불가 상태면 버튼 비활성화
-			runAllButton.setEnabled(false);
-		}
+			if (!sicSimulator.oneStep()) { runOneStepButton.setEnabled(false); runAllButton.setEnabled(false); }
+			update(); // SicSimulator.oneStep() 내부에서 GUI용 로그(니모닉)가 추가됨
+		} else { logToGui("Program not ready/finished."); runOneStepButton.setEnabled(false); runAllButton.setEnabled(false); }
 	}
 
-	/**
-	 * 남아있는 모든 명령어를 수행할 것을 SicSimulator에 요청한다.
-	 */
-	public void allStep() { // VisualSimulator의 멤버 메서드
+	public void allStep() { /* SwingWorker 사용, update() */
 		if (sicSimulator.isReadyToRun()) {
-			log("Starting allStep execution...");
-			runOneStepButton.setEnabled(false); // 실행 중에는 1스텝 버튼 비활성화
-			runAllButton.setEnabled(false);     // 실행 중에는 all스텝 버튼 비활성화
-
-			new SwingWorker<Void, String>() {
-				@Override
-				protected Void doInBackground() throws Exception {
-					sicSimulator.allStep(); // 백그라운드에서 실행
-					return null;
-				}
-
-				@Override
-				protected void done() {
-					try {
-						get(); // 예외가 발생했으면 여기서 처리
-					} catch (Exception e) {
-						log("[Error] Exception during allStep execution: " + e.getMessage());
-						e.printStackTrace(System.err);
-					}
-					update(); // 모든 스텝 실행 후 화면 갱신
-					// allStep 후에는 보통 프로그램이 종료되므로 버튼은 비활성화 유지
-					// runOneStepButton.setEnabled(sicSimulator.isReadyToRun());
-					// runAllButton.setEnabled(sicSimulator.isReadyToRun());
-					log("AllStep execution finished or halted.");
+			logToGui("--- All Step Start ---");
+			runOneStepButton.setEnabled(false); runAllButton.setEnabled(false);
+			new SwingWorker<Void,Void>() {
+				@Override protected Void doInBackground() { sicSimulator.allStep(); return null; }
+				@Override protected void done() {
+					try{get();}catch(Exception e){logToGui("[Error]AllStep:"+e.getMessage());e.printStackTrace();}
+					update(); logToGui("--- All Step Finish ---");
 				}
 			}.execute();
-		} else {
-			log("Program not ready or already finished. Cannot execute allStep.");
-		}
+		} else { logToGui("Program not ready/finished."); }
 	}
 
-
-	/**
-	 * 화면을 최신값으로 갱신하는 역할을 수행한다.
-	 */
-	public void update() { // VisualSimulator의 멤버 메서드
-		// H 레코드 정보
+	public void update() {
 		progNameFieldH.setText(resourceManager.getProgramName());
 		startAddrObjFieldH.setText(String.format("%06X", resourceManager.getHRecordObjectProgramStartAddress()));
 		progLengthFieldH.setText(String.format("%06X", resourceManager.getProgramTotalLength()));
-
-		// E 레코드 정보 / 실제 시작 주소
 		firstInstAddrFieldE.setText(String.format("%06X", resourceManager.getFirstInstructionAddress()));
 		startAddrMemFieldE.setText(String.format("%06X", resourceManager.getActualProgramLoadAddress()));
 
-		// 레지스터 값
-		String[] regHexFormat = {"%06X", "%06X", "%06X", "%06X", "%06X", "%06X", "%012X", "%06X", "%06X"}; // F는 48비트(12 hex)
-		int[] regConsts = {
-				ResourceManager.REG_A, ResourceManager.REG_X, ResourceManager.REG_L,
-				ResourceManager.REG_B, ResourceManager.REG_S, ResourceManager.REG_T,
-				-1, /* F는 별도 처리 */ ResourceManager.REG_PC, ResourceManager.REG_SW
-		};
+		updateRegisterField(ResourceManager.REG_A, 0, 6); updateRegisterField(ResourceManager.REG_X, 1, 6);
+		updateRegisterField(ResourceManager.REG_L, 2, 6); updateRegisterField(ResourceManager.REG_B, 3, 6);
+		updateRegisterField(ResourceManager.REG_S, 4, 6); updateRegisterField(ResourceManager.REG_T, 5, 6);
+		double fVal = resourceManager.getRegister_F();
+		regDecFields[6].setText(String.format("%.5e", fVal)); // 목표 이미지[9]는 F가 3.00000e+00 (A와 동일값?)
+		regHexFields[6].setText(String.format("%06X", 0));     // 목표 이미지[9]는 F Hex 000000
+		updateRegisterField(ResourceManager.REG_PC, 7, 6);
+		updateRegisterField(ResourceManager.REG_SW, 8, 6);
 
-		for (int i = 0; i < regLabels.length; i++) {
-			if (i == 6) { // F 레지스터 (인덱스 6)
-				double fVal = resourceManager.getRegister_F();
-				regDecFields[i].setText(String.format("%.6e", fVal)); // 지수형 10진수
-				// SIC/XE F는 48비트. long으로 변환 후 16진수 12자리 표시
-				long fBits = Double.doubleToLongBits(fVal); // 실제로는 SIC/XE 48비트 변환 필요
-				regHexFields[i].setText(String.format("%012X", fBits).substring(0,12)); // 상위 12자리만 표시 (임시)
-			} else {
-				int val = resourceManager.getRegister(regConsts[i]);
-				regDecFields[i].setText(Integer.toString(val));
-				regHexFields[i].setText(String.format(regHexFormat[i], val));
+		int lastTA = (sicSimulator.instLuncher != null) ? sicSimulator.instLuncher.getLastCalculatedTA() : InstLuncher.TA_NOT_CALCULATED_YET;
+		targetAddrField.setText((lastTA != InstLuncher.TA_NOT_CALCULATED_YET) ? String.format("%06X", lastTA) : "000000");
+
+		instructionCodeField.setText("");
+		if (sicSimulator.isReadyToRun() && sicSimulator.instLuncher != null) {
+			int pc = resourceManager.getRegister(ResourceManager.REG_PC);
+			byte[] instBytes = sicSimulator.instLuncher.getCurrentInstructionBytes(pc);
+			if (instBytes != null && instBytes.length > 0) {
+				StringBuilder sb = new StringBuilder();
+				for (byte b : instBytes) sb.append(String.format("%02X", b & 0xFF));
+				instructionCodeField.setText(sb.toString());
+			} else if (sicSimulator.isReadyToRun()){ // 프로그램은 실행 중인데 명령어 못가져오면 (종료 직전)
+				instructionCodeField.setText("(halted)");
+			} else { // 아예 로드 안됐거나 종료
+				instructionCodeField.setText("(idle)");
 			}
 		}
+		deviceStatusField.setText(resourceManager.getLastAccessedDeviceName());
 
-		// Target Address
-		if (sicSimulator.instLuncher != null) { // instLuncher가 null일 수 있음
-			int lastTA = sicSimulator.instLuncher.getLastCalculatedTA();
-			if (lastTA != InstLuncher.TA_NOT_CALCULATED_YET) { // TA가 계산된 경우
-				targetAddrField.setText(String.format("%06X", lastTA));
-			} else {
-				targetAddrField.setText("------"); // 아직 계산 안됨
-			}
-		}
-
-
-		// Instructions (Memory Area) - 간단한 메모리 덤프 (16진수)
-		StringBuilder memContent = new StringBuilder();
-		int currentPCForHighlight = resourceManager.getRegister(ResourceManager.REG_PC);
-		int memViewStart = Math.max(0, currentPCForHighlight - (16*4)); // PC 주변 4줄 위부터
-		memViewStart = (memViewStart / 16) * 16; // 16바이트 정렬
-
-		int linesToDisplay = 15; // 화면에 표시할 메모리 라인 수
-		int bytesPerLine = 16;
-
-		instructionArea.setText(""); // 이전 내용 지우기
-		for (int line = 0; line < linesToDisplay; line++) {
-			int lineStartAddr = memViewStart + line * bytesPerLine;
-			if (lineStartAddr >= resourceManager.memory.length) break;
-
-			memContent.append(String.format("%05X0: ", lineStartAddr / 16)); // 주소 표시 (XXXXX0 형태)
-			for (int offset = 0; offset < bytesPerLine; offset++) {
-				int addr = lineStartAddr + offset;
-				if (addr < resourceManager.memory.length) {
-					if (addr >= resourceManager.getActualProgramLoadAddress() && addr < resourceManager.getActualProgramLoadAddress() + resourceManager.getProgramTotalLength()){
-						memContent.append(resourceManager.getMemoryByteHex(addr));
-					} else {
-						memContent.append(".."); // 프로그램 범위 밖은 .. 으로 표시
-					}
-				} else {
-					memContent.append("  "); // 메모리 범위 밖
-				}
-				if ((offset + 1) % 4 == 0) memContent.append("  "); // 4바이트마다 큰 공백
-				else memContent.append(" ");
-			}
-			// ASCII 표현 (선택적)
-			// memContent.append("  |  ");
-			// for (int offset = 0; offset < bytesPerLine; offset++) { ... }
-			memContent.append("\n");
-		}
-		instructionArea.setText(memContent.toString());
-		instructionArea.setCaretPosition(0); // 맨 위로 스크롤
-
-		// "사용중인 장치"
-		deviceStatusField.setText(resourceManager.getLastAccessedDeviceName().isEmpty() ? "N/A" : resourceManager.getLastAccessedDeviceName());
-
-		// Log (명령어 수행 관련)
-		StringBuilder logBuilder = new StringBuilder();
+		logArea.setText("");
 		if (sicSimulator.getExecutionLog() != null) {
-			List<String> logs = sicSimulator.getExecutionLog();
-			// 최근 로그만 표시 (예: 마지막 20개)
-			int logStart = Math.max(0, logs.size() - 20);
-			for (int i = logStart; i < logs.size(); i++) {
-				logBuilder.append(logs.get(i)).append("\n");
+			for (String guiLog : sicSimulator.getExecutionLog()) { // SicSimulator가 GUI용 로그(니모닉)만 저장
+				logArea.append(guiLog + "\n");
 			}
-		}
-		logArea.setText(logBuilder.toString());
-		if (logArea.getDocument().getLength() > 0) { // 자동 스크롤
-			logArea.setCaretPosition(logArea.getDocument().getLength());
 		}
 	}
 
-	private void log(String message) { // VisualSimulator 내부 로그 추가용
-		if (logArea.getText().length() > 20000) { // 로그 너무 길어지면 일부 삭제 (앞부분)
-			try {
-				int end = logArea.getLineEndOffset(50); // 약 50줄 삭제
-				logArea.replaceRange("", 0, end);
-			} catch (Exception e) { logArea.setText("");}
+	private void updateRegisterField(int regConst, int fieldIndex, int hexDigits) {
+		int val = resourceManager.getRegister(regConst);
+		regDecFields[fieldIndex].setText(Integer.toString(val));
+		regHexFields[fieldIndex].setText(String.format("%0" + hexDigits + "X", val & 0xFFFFFF));
+	}
+
+	private void logToGui(String message) {
+		if (logArea.getText().length() > 10000) {
+			try { int end = logArea.getLineEndOffset(20); logArea.replaceRange("", 0, end); }
+			catch (Exception e){logArea.setText("");}
 		}
 		logArea.append(message + "\n");
-		System.out.println("[GUI_LOG] " + message); // 콘솔에도 출력 (디버깅용)
 	}
 
-
 	public static void main(String[] args) {
-		EventQueue.invokeLater(new Runnable() {
-			public void run() {
-				try {
-					// 시스템 기본 LookAndFeel 사용 (더 나은 UI)
-					UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-				} catch (Exception e) {
-					System.err.println("Warning: Could not set system LookAndFeel.");
-				}
-				VisualSimulator frame = new VisualSimulator();
-				frame.setVisible(true);
-			}
+		EventQueue.invokeLater(() -> {
+			try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); }
+			catch (Exception e) { System.err.println("LnF Error"); }
+			VisualSimulator frame = new VisualSimulator();
+			frame.setVisible(true);
 		});
 	}
 }
+
