@@ -55,14 +55,15 @@ public class SicLoader {
 						break;
 					case 'R': break;
 					case 'T':
-						if (line.length() < 9) { System.err.println("SicLoader: Malformed T (short): " + line); continue; }
-						int tRecStartAddrRelative = Integer.parseInt(line.substring(1, 7).trim(), 16);
-						int tRecLengthBytes = Integer.parseInt(line.substring(7, 9).trim(), 16);
-						if (line.length() < 9 + tRecLengthBytes * 2) { System.err.println("SicLoader: Malformed T (len mismatch): " + line); continue; }
-						String objectCodeHex = line.substring(9, 9 + tRecLengthBytes * 2);
-						int actualMemAddr = this.currentCsLoadAddress + tRecStartAddrRelative;
-						rMgr.setMemoryHex(actualMemAddr, objectCodeHex);
-						rMgr.addTRecordLoadedRegion(actualMemAddr, tRecLengthBytes); // T-레코드 로드 영역 정보 추가
+						if (line.length() < 9) { System.err.println("SicLoader: Malformed T record (too short): " + line); continue; }
+						int tRecordStartAddrRelative = Integer.parseInt(line.substring(1, 7).trim(), 16);
+						int tRecordLengthBytes = Integer.parseInt(line.substring(7, 9).trim(), 16);
+						if (line.length() < 9 + tRecordLengthBytes * 2) { System.err.println("SicLoader: Malformed T record (data length mismatch): " + line); continue; }
+						String objectCodeHex = line.substring(9, 9 + tRecordLengthBytes * 2);
+						int actualMemoryAddress = this.currentCsLoadAddress + tRecordStartAddrRelative;
+						rMgr.setMemoryHex(actualMemoryAddress, objectCodeHex);
+						// *** T-레코드로 실제 데이터가 로드된 영역을 ResourceManager에 등록 ***
+						rMgr.addTRecordLoadedRegion(actualMemoryAddress, tRecordLengthBytes);
 						break;
 					case 'M':
 						if (line.length() < 11) { System.err.println("SicLoader: Malformed M: " + line); continue; }

@@ -104,12 +104,11 @@ public class VisualSimulator extends JFrame {
 				if(!initLogs.isEmpty()) { for(String logEntry : initLogs) { logToGui(logEntry); } }
 				else { logToGui("Program '" + program.getName() + "' loaded. PC: " + String.format("0x%06X", resourceManager.getRegister(ResourceManager.REG_PC))); }
 
-				// M 레코드 적용 후의 메모리에서 T-레코드로 로드된 영역의 명령어/데이터만 표시
 				StringBuilder instructionsDisplayText = new StringBuilder();
 				List<MemoryRegion> loadedRegions = resourceManager.getTRecordLoadedRegions();
 
 				if (loadedRegions.isEmpty() && resourceManager.getProgramTotalLength() > 0) {
-					instructionCodeArea.setText("(No T-records found in object code, or T-record regions not registered)");
+					instructionCodeArea.setText("(No T-records found in object code or T-regions not registered by SicLoader)");
 				} else {
 					for (MemoryRegion region : loadedRegions) {
 						byte[] regionMemoryBytes = resourceManager.getMemoryBytes(region.getStartAddress(), region.getLength());
@@ -127,27 +126,23 @@ public class VisualSimulator extends JFrame {
 
 							int instructionLen = InstLuncher.getInstructionLengthFromBytes(instructionPrefixBytes);
 
-							if (instructionLen == 0) { // 길이 판단 불가 (T-레코드 내 데이터 또는 오류)
-								// T-레코드 내부는 모두 유효한 코드/데이터로 간주해야 하므로,
-								// 이 경우는 보통 T-레코드 끝부분의 패딩이 아니면 발생하지 않거나,
-								// 데이터 바이트(예: BYTE C'EOF')가 명령어로 오인되지 않도록 해야 함.
-								// 현재 InstLuncher.getInstructionLengthFromBytes는 알 수 없으면 0을 반환.
-								// 여기서는 T-레코드 내에서 길이 0이면 1바이트 데이터로 간주하고 표시.
+							if (instructionLen == 0) {
+								// 길이 판단 불가 시, 현재 바이트를 1바이트 데이터로 간주하고 표시
 								if (bytesAvailableToPeek > 0) {
-									instructionsDisplayText.append(String.format("%02X", regionMemoryBytes[currentOffsetInRegion] & 0xFF)).append(" (Data?)\n");
+									instructionsDisplayText.append(String.format("%02X", regionMemoryBytes[currentOffsetInRegion] & 0xFF)).append("\n");
 									currentOffsetInRegion += 1;
-									continue;
+									continue; // 다음 바이트에서 다시 시도
 								}
 								break;
 							}
 
 							if (currentOffsetInRegion + instructionLen > regionMemoryBytes.length) {
-								// T-레코드 내에서 명령어 길이가 영역을 벗어나는 경우 (오류)
+								// 명령어 길이가 현재 T-레코드 영역의 남은 바이트를 초과하면, 남은 바이트만 표시
 								StringBuilder partialHex = new StringBuilder();
 								for(int k=0; k < bytesAvailableToPeek; k++) {
 									partialHex.append(String.format("%02X", regionMemoryBytes[currentOffsetInRegion + k] & 0xFF));
 								}
-								instructionsDisplayText.append(partialHex.toString()).append(" (Partial)\n");
+								instructionsDisplayText.append(partialHex.toString()).append("\n");
 								break;
 							}
 
