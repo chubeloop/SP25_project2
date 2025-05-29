@@ -325,7 +325,10 @@ public class InstLuncher {
     private int handleLDA(int pc, byte[] iB, int l, int oF) {
         TargetAddressInfo taInfo = calculateTargetAddress(pc,iB,l,oF); if(taInfo==null)return ERROR_HALT;
         int val; if(taInfo.isImmediate)val=taInfo.value; else {if(taInfo.address<0||taInfo.address+2>=rMgr.memory.length){lastErrorMessage="LDA: Memory access for operand OOB @0x"+String.format("%06X",taInfo.address);return ERROR_HALT;}val=memToSignedInt(taInfo.address,3);}
-        rMgr.setRegister(ResourceManager.REG_A,val);lastExecutedInstructionInfo+=String.format(" ; A <- 0x%06X",val&0xFFFFFF);return pc+l;
+        rMgr.setRegister(ResourceManager.REG_A,val);
+        System.out.println("[InstLuncher.handleLDA] After setRegister for A, value in ResourceManager: " + rMgr.getRegister(ResourceManager.REG_A));
+        lastExecutedInstructionInfo+=String.format(" ; A <- 0x%06X",val&0xFFFFFF);
+        return pc+l;
     }
     private int handleLDX(int pc, byte[] iB, int l, int oF) {
         TargetAddressInfo taInfo = calculateTargetAddress(pc,iB,l,oF); if(taInfo==null)return ERROR_HALT;
@@ -405,7 +408,18 @@ public class InstLuncher {
     private int handleMULR(int pc, byte[] iB, int l, int oF) {if(l!=2){lastErrorMessage="MULR: Invalid length";return ERROR_HALT;}int r1n=(iB[1]&0xF0)>>4;int r2n=iB[1]&0x0F;if(r1n>9||r1n==6||r1n==7||r2n>9||r2n==6||r2n==7){lastErrorMessage="MULR: Invalid Reg num";return ERROR_HALT;}int v1=rMgr.getRegister(r1n);int v2=rMgr.getRegister(r2n);long res=(long)v2*v1;rMgr.setRegister(r2n,(int)(res&0xFFFFFF));lastExecutedInstructionInfo=String.format("r%d,r%d;r%d<-r%d*r%d(0x%X*0x%X=0x%X)",r1n,r2n,r2n,r2n,r1n,v2&0xFFFFFF,v1&0xFFFFFF,(int)res&0xFFFFFF);return pc+l;}
     private int handleDIVR(int pc, byte[] iB, int l, int oF) {if(l!=2){lastErrorMessage="DIVR: Invalid length";return ERROR_HALT;}int r1n=(iB[1]&0xF0)>>4;int r2n=iB[1]&0x0F;if(r1n>9||r1n==6||r1n==7||r2n>9||r2n==6||r2n==7){lastErrorMessage="DIVR: Invalid Reg num";return ERROR_HALT;}int v1=rMgr.getRegister(r1n);int v2=rMgr.getRegister(r2n);if(v1==0){lastErrorMessage="DIVR: Division by zero";return ERROR_HALT;}rMgr.setRegister(r2n,(v2/v1)&0xFFFFFF);lastExecutedInstructionInfo=String.format("r%d,r%d;r%d<-r%d/r%d(0x%X/0x%X=0x%X)",r1n,r2n,r2n,r2n,r1n,v2&0xFFFFFF,v1&0xFFFFFF,(v2/v1)&0xFFFFFF);return pc+l;}
     private int handleCOMPR(int pc, byte[] iB, int l, int oF) {if(l!=2){lastErrorMessage="COMPR: Invalid length";return ERROR_HALT;}int r1n=(iB[1]&0xF0)>>4;int r2n=iB[1]&0x0F;if(r1n>9||r1n==6||r1n==7||r2n>9||r2n==6||r2n==7){lastErrorMessage="COMPR: Invalid Reg num";return ERROR_HALT;}int v1s=rMgr.getRegister(r1n);int v2s=rMgr.getRegister(r2n);setConditionCode(Integer.compare(v1s,v2s));lastExecutedInstructionInfo=String.format("r%d,r%d;Comp r%d(0x%X)w r%d(0x%X).CC=%s",r1n,r2n,r1n,v1s&0xFFFFFF,r2n,v2s&0xFFFFFF,getCCString());return pc+l;}
-    private int handleCLEAR(int pc, byte[] iB, int l, int oF) {if(l!=2){lastErrorMessage="CLEAR: Invalid length";return ERROR_HALT;}int r1n=(iB[1]&0xF0)>>4;if(r1n>9||r1n==6||r1n==7){lastErrorMessage="CLEAR: Invalid Reg num";return ERROR_HALT;}rMgr.setRegister(r1n,0);lastExecutedInstructionInfo=String.format("r%d;r%d<-0",r1n,r1n);return pc+l;}
+    private int handleCLEAR(int pc, byte[] iB, int l, int oF) {
+        if(l!=2){lastErrorMessage="CLEAR: Invalid length";return ERROR_HALT;}
+        int r1n=(iB[1]&0xF0)>>4; // 상위 4비트가 레지스터 번호
+        if(r1n>9||r1n==ResourceManager.REG_F||r1n==7){ // 유효한 레지스터 번호인지 확인 (0-5, 8, 9)
+            lastErrorMessage="CLEAR: Invalid Register number " + r1n;
+            return ERROR_HALT;
+        }
+        rMgr.setRegister(r1n,0); // 해당 레지스터를 0으로 설정
+        System.out.println("[InstLuncher.handleCLEAR] After setRegister for r" + r1n + ", value in ResourceManager: " + rMgr.getRegister(r1n));
+        lastExecutedInstructionInfo=String.format("r%d;r%d<-0",r1n,r1n);
+        return pc+l;
+    }
     private int handleTIXR(int pc, byte[] iB, int l, int oF) {if(l!=2){lastErrorMessage="TIXR: Invalid length";return ERROR_HALT;}int r1n=(iB[1]&0xF0)>>4;if(r1n>9||r1n==6||r1n==7){lastErrorMessage="TIXR: Invalid Reg num";return ERROR_HALT;}int valX=rMgr.getRegister(ResourceManager.REG_X);valX=(valX+1)&0xFFFFFF;rMgr.setRegister(ResourceManager.REG_X,valX);int valR1s=rMgr.getRegister(r1n);setConditionCode(Integer.compare(valX,valR1s));lastExecutedInstructionInfo=String.format("r%d;X++(0x%06X),CompXw r%d(0x%06X).CC=%s",r1n,valX,r1n,valR1s&0xFFFFFF,getCCString());return pc+l;}
     private int handleRMO(int pc, byte[] iB, int l, int oF) {if(l!=2){lastErrorMessage="RMO: Invalid length";return ERROR_HALT;}int r1n=(iB[1]&0xF0)>>4;int r2n=iB[1]&0x0F;if(r1n>9||r1n==6||r1n==7||r2n>9||r2n==6||r2n==7){lastErrorMessage="RMO: Invalid Reg num";return ERROR_HALT;}rMgr.setRegister(r2n,rMgr.getRegister(r1n));lastExecutedInstructionInfo=String.format("r%d,r%d;r%d<-r%d(0x%X)",r1n,r2n,r2n,r1n,rMgr.getRegister(r1n)&0xFFFFFF);return pc+l;}
     private int handleSHIFTL(int pc,byte[]iB,int len,int oF){if(len!=2){lastErrorMessage="SHIFTL: Invalid length";return ERROR_HALT;}int r1n=(iB[0]&0xF0)>>4;int n=(iB[1]&0x0F);if(r1n>9||r1n==6||r1n==7){lastErrorMessage="SHIFTL: Invalid Reg num";return ERROR_HALT;}int r1val=rMgr.getRegister(r1n);int shiftedVal=(r1val<<(n+1))&0xFFFFFF;/* Add more logic for bits shifted out if needed */rMgr.setRegister(r1n,shiftedVal);lastExecutedInstructionInfo=String.format("r%d,n=%d ; r%d << %d = 0x%06X",r1n,n+1,r1n,n+1,shiftedVal);return pc+len;}
@@ -432,4 +446,48 @@ public class InstLuncher {
         if (length == 0 || pc + length > rMgr.memory.length) return new byte[0];
         return rMgr.getMemoryBytes(pc, length);
     }
+
+    // InstLuncher.java 안에 추가
+
+    /**
+     * 메모리 주소(PC) 없이, 주어진 바이트 배열(명령어의 시작 부분)만으로 명령어 길이를 추정합니다.
+     * Format 1, 2는 첫 바이트로, Format 3/4는 두 번째 바이트의 e-bit로 판단합니다.
+     * @param instructionStartBytes 명령어의 시작 바이트들 (최소 1바이트, Format 3/4 판단 시 최소 2바이트 필요)
+     * @return 추정된 명령어 길이 (1, 2, 3, 또는 4). 오류 시 0.
+     */
+    public static int getInstructionLengthFromBytes(byte[] instructionStartBytes) {
+        if (instructionStartBytes == null || instructionStartBytes.length == 0) {
+            return 0; // 잘못된 입력
+        }
+
+        int opcodeFull = instructionStartBytes[0] & 0xFF;
+        int pureOpcode = opcodeFull & 0xFC; // 하위 2비트(n,i) 제외
+
+        switch (pureOpcode) {
+            // Format 1 (1 byte)
+            case OP_FIX: case OP_FLOAT: case OP_HIO: case OP_NORM: case OP_SIO: case OP_TIO:
+                return 1;
+            // Format 2 (2 bytes)
+            case OP_ADDR: case OP_CLEAR: case OP_COMPR: case OP_DIVR: case OP_MULR:
+            case OP_RMO: case OP_SHIFTL: case OP_SHIFTR: case OP_SUBR: case OP_SVC:
+            case OP_TIXR:
+                return 2;
+            default: // Format 3 or 4
+                if (instructionStartBytes.length < 2) {
+                    // Format 3/4 여부 판단에 nixbpe 바이트가 필요하지만 충분한 바이트가 제공되지 않음.
+                    // 이 경우, 기본적으로 Format 3으로 가정하거나, 오류로 처리할 수 있음.
+                    // 실제 사용 시에는 최소 2바이트를 전달해야 함.
+                    // 여기서는 안전하게 3으로 가정하거나, 호출하는 쪽에서 바이트 길이를 보장해야 함.
+                    // 만약 이 함수가 로드된 전체 메모리 스트림을 순회하며 호출된다면,
+                    // instructionStartBytes는 항상 현재 위치부터 최소 2바이트를 포함해야 함.
+                    // System.err.println("getInstructionLengthFromBytes: Insufficient bytes for Format 3/4 check, assuming 3.");
+                    // return 3; // 또는 오류로 0 반환
+                    return 0; // 최소 2바이트가 없으면 길이 판단 불가
+                }
+                byte nixbpeByte = instructionStartBytes[1];
+                boolean e_flag = (nixbpeByte & 0x10) != 0; // Check e bit for format 4
+                return e_flag ? 4 : 3;
+        }
+    }
+
 }

@@ -12,170 +12,90 @@ public class SicLoader {
 	private int currentCsLoadAddress = 0;
 	private int programTotalCumulativeLength = 0;
 	private boolean firstExecutionAddressSet = false;
-	private List<MRecordTemp> modificationRecordsBuffer = new ArrayList<>(); // 타입 명시
+	private List<MRecordTemp> modificationRecordsBuffer;
 
-	private static class MRecordTemp { // 제공된 파일[3]과 동일
-		int csRelativeAddress;
-		int lengthHalfBytes;
-		char operation;
-		String symbolName;
-		int csLoadAddressAtTimeOfRecord;
-		MRecordTemp(int addr, int len, char op, String sym, int csStart) {
-			this.csRelativeAddress = addr; this.lengthHalfBytes = len;
-			this.operation = op; this.symbolName = sym;
-			this.csLoadAddressAtTimeOfRecord = csStart;
-		}
+	private static class MRecordTemp {
+		int csRelativeAddress; int lengthHalfBytes; char operation; String symbolName; int csLoadAddressAtTimeOfRecord;
+		MRecordTemp(int addr, int len, char op, String sym, int csStart) {this.csRelativeAddress=addr;this.lengthHalfBytes=len;this.operation=op;this.symbolName=sym;this.csLoadAddressAtTimeOfRecord=csStart;}
 	}
 
-	public SicLoader(ResourceManager resourceManager) { // 제공된 파일[3]과 동일
-		if (resourceManager == null) {
-			throw new IllegalArgumentException("ResourceManager cannot be null for SicLoader.");
-		}
+	public SicLoader(ResourceManager resourceManager) {
+		if (resourceManager == null) throw new IllegalArgumentException("RM cannot be null for SicLoader.");
 		this.rMgr = resourceManager;
+		this.modificationRecordsBuffer = new ArrayList<>();
 	}
 
-	public void setResourceManager(ResourceManager resourceManager) { // 제공된 파일[3]과 동일
-		if (resourceManager == null) {
-			throw new IllegalArgumentException("ResourceManager cannot be null.");
-		}
-		this.rMgr = resourceManager;
-	}
+	public void load(File objectCodeFile) {
+		if (objectCodeFile == null || !objectCodeFile.exists() || !objectCodeFile.isFile()) { System.err.println("SicLoader: Obj file invalid: " + (objectCodeFile != null ? objectCodeFile.getPath() : "null")); return; }
+		if (rMgr == null) { System.err.println("SicLoader: RM not init."); return; }
 
-	public void load(File objectCodeFile) { // 제공된 파일[3]의 로직 사용
-		if (objectCodeFile == null || !objectCodeFile.exists() || !objectCodeFile.isFile()) {
-			System.err.println("Object code file is invalid: " + (objectCodeFile != null ? objectCodeFile.getPath() : "null"));
-			return;
-		}
-		if (rMgr == null) {
-			System.err.println("ResourceManager not set in SicLoader."); return;
-		}
-
-		rMgr.initializeResource();
-		this.currentCsLoadAddress = rMgr.getActualProgramLoadAddress(); // rMgr에서 로드 시작 주소 가져옴
+		this.currentCsLoadAddress = rMgr.getActualProgramLoadAddress();
 		this.programTotalCumulativeLength = 0;
 		this.firstExecutionAddressSet = false;
 		this.modificationRecordsBuffer.clear();
 
-		String line;
-		String currentCsName = "";
-		int currentCsDeclaredLength = 0;
-		boolean firstHRecordProcessed = false; // 첫 H 레코드인지 판별
+		String line; String currentCsName = ""; int currentCsDeclaredLength = 0; boolean firstHRecordProcessed = false;
 
 		try (BufferedReader reader = new BufferedReader(new FileReader(objectCodeFile))) {
 			while ((line = reader.readLine()) != null) {
-				line = line.trim().replace('\t', ' ');
-				if (line.isEmpty()) continue;
+				line = line.trim().replace('\t', ' '); if (line.isEmpty()) continue;
 				char recordType = line.charAt(0);
-
 				switch (recordType) {
 					case 'H':
-						if (line.length() < 19) { /* 오류 처리 */ continue; }
+						if (line.length() < 19) { System.err.println("SicLoader: Malformed H: " + line); continue; }
 						currentCsName = line.substring(1, 7).trim();
 						int csObjStartAddr = Integer.parseInt(line.substring(7, 13).trim(), 16);
 						currentCsDeclaredLength = Integer.parseInt(line.substring(13, 19).trim(), 16);
-
-						if (!firstHRecordProcessed) {
-							rMgr.setProgramName(currentCsName);
-							rMgr.setHRecordObjectProgramStartAddress(csObjStartAddr);
-							// rMgr.setActualProgramLoadAddress(this.currentCsLoadAddress); // 이미 0으로 초기화됨
-							firstHRecordProcessed = true;
-						}
+						if (!firstHRecordProcessed) { rMgr.setProgramName(currentCsName); rMgr.setHRecordObjectProgramStartAddress(csObjStartAddr); firstHRecordProcessed = true; }
 						rMgr.addExternalSymbol(currentCsName, this.currentCsLoadAddress);
 						break;
 					case 'D':
-						if (line.length() < 13) { /* 오류 처리 */ continue; }
-						for (int i = 1; i < line.length(); i += 12) {
-							if (i + 12 > line.length()) { /* 오류 처리 */ break; }
-							String defSymbol = line.substring(i, i + 6).trim();
-							int defAddrRelative = Integer.parseInt(line.substring(i + 6, i + 12).trim(), 16);
-							rMgr.addExternalSymbol(defSymbol, this.currentCsLoadAddress + defAddrRelative);
-						}
+						if (line.length() < 13) { System.err.println("SicLoader: Malformed D: " + line); continue; }
+						for (int i=1; i < line.length(); i+=12) { if(i+12 > line.length()) break; String defSym=line.substring(i,i+6).trim(); int defAddrRel=Integer.parseInt(line.substring(i+6,i+12).trim(),16); rMgr.addExternalSymbol(defSym, this.currentCsLoadAddress + defAddrRel); }
 						break;
-					case 'R': /* R 레코드 처리 (현재는 무시) */ break;
+					case 'R': break;
 					case 'T':
-						if (line.length() < 9) { /* 오류 처리 */ continue; }
+						if (line.length() < 9) { System.err.println("SicLoader: Malformed T (short): " + line); continue; }
 						int tRecStartAddrRelative = Integer.parseInt(line.substring(1, 7).trim(), 16);
 						int tRecLengthBytes = Integer.parseInt(line.substring(7, 9).trim(), 16);
-						if (line.length() < 9 + tRecLengthBytes * 2) { /* 오류 처리 */ continue; }
+						if (line.length() < 9 + tRecLengthBytes * 2) { System.err.println("SicLoader: Malformed T (len mismatch): " + line); continue; }
 						String objectCodeHex = line.substring(9, 9 + tRecLengthBytes * 2);
 						int actualMemAddr = this.currentCsLoadAddress + tRecStartAddrRelative;
 						rMgr.setMemoryHex(actualMemAddr, objectCodeHex);
+						rMgr.addTRecordLoadedRegion(actualMemAddr, tRecLengthBytes); // T-레코드 로드 영역 정보 추가
 						break;
 					case 'M':
-						if (line.length() < 11) { /* 오류 처리 */ continue; }
-						int modAddrRelativeCS = Integer.parseInt(line.substring(1, 7).trim(), 16);
-						int modLengthHalfBytes = Integer.parseInt(line.substring(7, 9).trim(), 16);
-						char operation = line.charAt(9);
-						String symbolName = line.substring(10).trim();
-						modificationRecordsBuffer.add(new MRecordTemp(modAddrRelativeCS, modLengthHalfBytes, operation, symbolName, this.currentCsLoadAddress));
+						if (line.length() < 11) { System.err.println("SicLoader: Malformed M: " + line); continue; }
+						modificationRecordsBuffer.add(new MRecordTemp(Integer.parseInt(line.substring(1,7).trim(),16),Integer.parseInt(line.substring(7,9).trim(),16),line.charAt(9),line.substring(10).trim(),this.currentCsLoadAddress));
 						break;
 					case 'E':
-						if (!firstExecutionAddressSet) {
-							if (line.length() > 1) {
-								if (line.length() < 7) { /* 오류 처리 */ }
-								else {
-									int execAddrRelativeCS = Integer.parseInt(line.substring(1, 7).trim(), 16);
-									rMgr.setFirstInstructionAddress(this.currentCsLoadAddress + execAddrRelativeCS);
-									firstExecutionAddressSet = true;
-								}
-							} else {
-								rMgr.setFirstInstructionAddress(this.currentCsLoadAddress); // 이 CS의 시작 주소
-								firstExecutionAddressSet = true;
-							}
-						}
-						this.programTotalCumulativeLength += currentCsDeclaredLength;
-						this.currentCsLoadAddress = rMgr.getActualProgramLoadAddress() + this.programTotalCumulativeLength;
+						if (!firstExecutionAddressSet) { if (line.length() > 1) { if (line.length() < 7) {} else {rMgr.setFirstInstructionAddress(this.currentCsLoadAddress + Integer.parseInt(line.substring(1, 7).trim(), 16)); firstExecutionAddressSet = true;} } else { rMgr.setFirstInstructionAddress(rMgr.getActualProgramLoadAddress()); firstExecutionAddressSet = true; } }
+						this.programTotalCumulativeLength += currentCsDeclaredLength; this.currentCsLoadAddress = rMgr.getActualProgramLoadAddress() + this.programTotalCumulativeLength;
+						currentCsName = ""; currentCsDeclaredLength = 0;
 						break;
-					default: /* 오류 처리 */ break;
+					default: System.err.println("SicLoader: Unknown record type '" + recordType + "': " + line); break;
 				}
 			}
-
-			// M 레코드 적용 (제공된 파일[3] 로직)
 			for (MRecordTemp mRec : modificationRecordsBuffer) {
-				Integer symbolAbsoluteAddress = rMgr.getExternalSymbolAddress(mRec.symbolName);
-				if (symbolAbsoluteAddress == null) { /* 오류 처리 */ continue; }
-				int actualModMemoryAddr = mRec.csLoadAddressAtTimeOfRecord + mRec.csRelativeAddress;
+				Integer symAbsAddr = rMgr.getExternalSymbolAddress(mRec.symbolName); if (symAbsAddr == null) {System.err.println("SicLoader: MRec Err - Sym '"+mRec.symbolName+"' not found."); continue; }
+				int actModMemAddr = mRec.csLoadAddressAtTimeOfRecord + mRec.csRelativeAddress;
+				// *** numBytesToModify 선언 및 초기화 위치 수정/확인 ***
 				int numBytesToModify = (mRec.lengthHalfBytes + 1) / 2;
-				if (actualModMemoryAddr < 0 || actualModMemoryAddr + numBytesToModify > rMgr.memory.length) { /* 오류 */ continue; }
-
-				byte[] originalValueBytes = rMgr.getMemoryBytes(actualModMemoryAddr, numBytesToModify);
-				if (originalValueBytes.length < numBytesToModify) { /* 오류 */ continue; }
-
-				long originalValSegment = 0;
-				if (mRec.lengthHalfBytes == 5) {
-					originalValSegment = ( (long)(originalValueBytes[0] & 0x0F) << 16) |
-							( (long)(originalValueBytes[1] & 0xFF) << 8 ) |
-							( (long)(originalValueBytes[2] & 0xFF) );
-				} else if (mRec.lengthHalfBytes == 6) {
-					originalValSegment = ( (long)(originalValueBytes[0] & 0xFF) << 16) |
-							( (long)(originalValueBytes[1] & 0xFF) << 8 ) |
-							( (long)(originalValueBytes[2] & 0xFF) );
-				} else { /* 오류 */ continue; }
-
-				long modifiedValSegment = (mRec.operation == '+') ? (originalValSegment + symbolAbsoluteAddress)
-						: (originalValSegment - symbolAbsoluteAddress);
-				byte[] newValueBytes = new byte[numBytesToModify];
-				if (mRec.lengthHalfBytes == 5) {
-					newValueBytes[0] = (byte) ((originalValueBytes[0] & 0xF0) | ((modifiedValSegment >> 16) & 0x0F));
-					newValueBytes[1] = (byte) ((modifiedValSegment >> 8) & 0xFF);
-					newValueBytes[2] = (byte) (modifiedValSegment & 0xFF);
-				} else {
-					modifiedValSegment &= 0xFFFFFFL;
-					newValueBytes[0] = (byte) ((modifiedValSegment >> 16) & 0xFF);
-					newValueBytes[1] = (byte) ((modifiedValSegment >> 8) & 0xFF);
-					newValueBytes[2] = (byte) (modifiedValSegment & 0xFF);
-				}
-				rMgr.setMemoryBytes(actualModMemoryAddr, newValueBytes, numBytesToModify);
+				if (actModMemAddr < 0 || actModMemAddr + numBytesToModify > rMgr.memory.length) {System.err.println("SicLoader: MRec Addr OOB 0x"+Integer.toHexString(actModMemAddr)); continue; }
+				byte[] origBytes = rMgr.getMemoryBytes(actModMemAddr, numBytesToModify); if(origBytes.length<numBytesToModify){System.err.println("SicLoader: MRec - Read orig failed 0x"+Integer.toHexString(actModMemAddr));continue;}
+				long origValSeg = 0;
+				if (mRec.lengthHalfBytes == 5) { origValSeg = ((long)(origBytes[0]&0x0F)<<16)|((long)(origBytes[1]&0xFF)<<8)|((long)(origBytes[2]&0xFF)); }
+				else if (mRec.lengthHalfBytes == 6) { origValSeg = ((long)(origBytes[0]&0xFF)<<16)|((long)(origBytes[1]&0xFF)<<8)|((long)(origBytes[2]&0xFF)); }
+				else { System.err.println("SicLoader: MRec - Invalid lenHB: " + mRec.lengthHalfBytes); continue;}
+				long modValSeg = (mRec.operation=='+')?(origValSeg+symAbsAddr):(origValSeg-symAbsAddr);
+				byte[] newBytes = new byte[numBytesToModify]; // 여기서 numBytesToModify 사용
+				if(mRec.lengthHalfBytes==5){newBytes[0]=(byte)((origBytes[0]&0xF0)|((modValSeg>>16)&0x0F));newBytes[1]=(byte)((modValSeg>>8)&0xFF);newBytes[2]=(byte)(modValSeg&0xFF);}
+				else {modValSeg&=0xFFFFFFL;newBytes[0]=(byte)((modValSeg>>16)&0xFF);newBytes[1]=(byte)((modValSeg>>8)&0xFF);newBytes[2]=(byte)(modValSeg&0xFF);}
+				rMgr.setMemoryBytes(actModMemAddr, newBytes, numBytesToModify); // 마지막 인자도 numBytesToModify
 			}
-
-			if (!firstExecutionAddressSet && rMgr.getProgramName() != null && !rMgr.getProgramName().isEmpty()) {
-				rMgr.setFirstInstructionAddress(rMgr.getActualProgramLoadAddress());
-			}
+			if (!firstExecutionAddressSet && rMgr.getProgramName() != null && !rMgr.getProgramName().isEmpty()) { rMgr.setFirstInstructionAddress(rMgr.getActualProgramLoadAddress()); }
 			rMgr.setProgramTotalLength(this.programTotalCumulativeLength);
-
-		} catch (IOException | NumberFormatException e) {
-			System.err.println("Error during SicLoader.load: " + e.getMessage());
-			e.printStackTrace();
-		}
+		} catch (IOException | NumberFormatException e) { System.err.println("SicLoader: Error during load: " + e.getMessage()); e.printStackTrace();
+		} catch (Exception e) { System.err.println("SicLoader: Unexpected error: " + e.getMessage()); e.printStackTrace(); }
 	}
 }
