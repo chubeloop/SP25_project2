@@ -168,22 +168,78 @@ public class InstLuncher {
         }
     }
 
+    // InstLuncher.java
     public static int getInstructionLengthFromBytes(byte[] instructionStartBytes) {
         if (instructionStartBytes == null || instructionStartBytes.length == 0) {
             return 0;
         }
         int opcodeFull = instructionStartBytes[0] & 0xFF;
-        int pureOpcode = opcodeFull & 0xFC;
-        switch (pureOpcode) {
-            case OP_FIX: case OP_FLOAT: case OP_HIO: case OP_NORM: case OP_SIO: case OP_TIO: return 1;
-            case OP_ADDR: case OP_CLEAR: case OP_COMPR: case OP_DIVR: case OP_MULR: case OP_RMO: case OP_SHIFTL: case OP_SHIFTR: case OP_SUBR: case OP_SVC: case OP_TIXR: return 2;
-            default:
-                if (instructionStartBytes.length < 2) { return 0; }
-                byte nixbpeByte = instructionStartBytes[1];
-                boolean e_flag = (nixbpeByte & 0x10) != 0;
-                return e_flag ? 4 : 3;
+        int pureOpcode = opcodeFull & 0xFC; // n,i 비트 제외
+
+        // 정확한 Format 1 명령어 Opcode들 (pureOpcode 기준)
+        if (pureOpcode == OP_FIX || pureOpcode == OP_FLOAT || pureOpcode == OP_HIO ||
+                pureOpcode == OP_NORM || pureOpcode == OP_SIO || pureOpcode == OP_TIO ) {
+            // 추가적으로, Format 1 명령어는 ni 비트가 00이어야 함 (opcodeFull == pureOpcode)
+            // 하지만, 오브젝트 코드에서는 단순 SIC 명령어를 3바이트로 표현할 때 opcode만 사용되기도 함.
+            // 여기서는 일단 pureOpcode만으로 Format 1 길이를 결정.
+            // 만약 'F1'이 TIO(F8)나 SIO(F0)로 오인되지 않으려면, opcodeFull을 사용해야 함.
+            // SIO(F0), TIO(F8). 'F1'은 이들에 해당 안함.
+            if (opcodeFull == OP_FIX || opcodeFull == OP_FLOAT || opcodeFull == OP_HIO ||
+                    opcodeFull == OP_NORM || opcodeFull == OP_SIO || opcodeFull == OP_TIO) {
+                return 1;
+            }
+        }
+
+        // 정확한 Format 2 명령어 Opcode들 (pureOpcode 기준)
+        if (pureOpcode == OP_ADDR || pureOpcode == OP_CLEAR || pureOpcode == OP_COMPR ||
+                pureOpcode == OP_DIVR || pureOpcode == OP_MULR  || pureOpcode == OP_RMO ||
+                pureOpcode == OP_SHIFTL|| pureOpcode == OP_SHIFTR|| pureOpcode == OP_SUBR ||
+                pureOpcode == OP_SVC   || pureOpcode == OP_TIXR ) {
+            // Format 2도 ni 비트가 없어야 함 (opcodeFull == pureOpcode)
+            // 실제로는 opcode + r1r2 이므로, opcodeFull로 체크하는 것이 더 정확.
+            if (opcodeFull == OP_ADDR || opcodeFull == OP_CLEAR || opcodeFull == OP_COMPR || // ... 모든 Format 2 opcodeFull
+                    opcodeFull == OP_DIVR || opcodeFull == OP_MULR  || opcodeFull == OP_RMO ||
+                    opcodeFull == OP_SHIFTL|| opcodeFull == OP_SHIFTR|| opcodeFull == OP_SUBR ||
+                    opcodeFull == OP_SVC   || opcodeFull == OP_TIXR) {
+                if (instructionStartBytes.length < 2) return 0; // Format 2인데 바이트 부족
+                return 2;
+            }
+        }
+
+        // Format 3 또는 4로 시도
+        // 알려진 Format 3/4 명령어의 pureOpcode가 아니면 0을 반환하는 것이 이상적.
+        // 예를 들어 0x45 (EBCDIC 'E')는 명령어 시작이 아님.
+        // 그러나 모든 Format 3/4 opcode를 나열하기 어려우므로, 일단 nixbpe 기반으로 길이 추정.
+        // 이로 인해 데이터가 명령어로 오인될 수 있음.
+        if (instructionStartBytes.length < 2) {
+            return 0; // Format 3/4 판단에 nixbpe 바이트 필요
+        }
+        // 모든 Format 3/4 명령어는 첫 바이트의 하위 2비트(n,i)를 가짐.
+        // 만약 첫 바이트가 이 패턴을 따르지 않으면 (예: 0x4C0000 RSUB), 문제가 될 수 있음.
+        // RSUB (4C)는 n,i가 00이므로 (opcodeFull & 0x03) == 0. 이 경우 Format 3.
+
+        // opcodeFull을 기준으로 Format 3/4 여부를 판단하는 것이 더 안전할 수 있음.
+        // 예: opcode가 0x00~0xEC 범위 내에 있고, Format 1,2가 아니면 Format 3/4로 간주.
+        // 0xF0, 0xF4, 0xF8은 Format 1.
+        // 이외의 0xF로 시작하는 것 (예: F1)은 유효한 명령어가 아님.
+        if ((pureOpcode >= 0xF0 && pureOpcode <= 0xF8) && // Format 1 범위인데 위에서 안걸렸다면
+                !(opcodeFull == OP_SIO || opcodeFull == OP_TIO || opcodeFull == OP_HIO)) { // 실제 Format 1이 아니면
+            return 0; // F1, F2, F3, F5, F6, F7 등은 명령어 아님
+        }
+
+
+        byte nixbpeByte = instructionStartBytes[1];
+        boolean e_flag = (nixbpeByte & 0x10) != 0;
+
+        if(e_flag) {
+            if (instructionStartBytes.length < 4) return 0;
+            return 4;
+        } else {
+            if (instructionStartBytes.length < 3) return 0;
+            return 3;
         }
     }
+
 
     private static class TargetAddressInfo {
         int address;
