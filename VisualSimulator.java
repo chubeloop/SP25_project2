@@ -108,7 +108,7 @@ public class VisualSimulator extends JFrame {
 				List<MemoryRegion> loadedRegions = resourceManager.getTRecordLoadedRegions();
 
 				if (loadedRegions.isEmpty() && resourceManager.getProgramTotalLength() > 0) {
-					instructionCodeArea.setText("(No T-records found in object code or T-regions not registered by SicLoader)");
+					instructionCodeArea.setText("(No T-records with content found or T-regions not registered)");
 				} else {
 					for (MemoryRegion region : loadedRegions) {
 						byte[] regionMemoryBytes = resourceManager.getMemoryBytes(region.getStartAddress(), region.getLength());
@@ -117,7 +117,7 @@ public class VisualSimulator extends JFrame {
 						int currentOffsetInRegion = 0;
 						while (currentOffsetInRegion < regionMemoryBytes.length) {
 							int bytesAvailableToPeek = regionMemoryBytes.length - currentOffsetInRegion;
-							int bytesToPeek = Math.min(4, bytesAvailableToPeek);
+							int bytesToPeek = Math.min(4, bytesAvailableToPeek); // Max SIC/XE instruction length
 
 							if (bytesToPeek <= 0) break;
 
@@ -127,25 +127,22 @@ public class VisualSimulator extends JFrame {
 							int instructionLen = InstLuncher.getInstructionLengthFromBytes(instructionPrefixBytes);
 
 							if (instructionLen == 0) {
-								// 길이 판단 불가 시, 현재 바이트를 1바이트 데이터로 간주하고 표시
+								// 길이 판단 불가 시 (데이터 또는 리터럴 가능성 높음), 해당 바이트를 표시하지 않고 건너뜀.
 								if (bytesAvailableToPeek > 0) {
-									instructionsDisplayText.append(String.format("%02X", regionMemoryBytes[currentOffsetInRegion] & 0xFF)).append("\n");
-									currentOffsetInRegion += 1;
-									continue; // 다음 바이트에서 다시 시도
+									currentOffsetInRegion += 1; // 최소 1바이트 건너뛰고 다음 바이트에서 다시 시도
+									continue;
 								}
 								break;
 							}
 
+							// 명령어 길이가 현재 T-레코드 영역의 남은 바이트를 초과하는지 확인
 							if (currentOffsetInRegion + instructionLen > regionMemoryBytes.length) {
-								// 명령어 길이가 현재 T-레코드 영역의 남은 바이트를 초과하면, 남은 바이트만 표시
-								StringBuilder partialHex = new StringBuilder();
-								for(int k=0; k < bytesAvailableToPeek; k++) {
-									partialHex.append(String.format("%02X", regionMemoryBytes[currentOffsetInRegion + k] & 0xFF));
-								}
-								instructionsDisplayText.append(partialHex.toString()).append("\n");
+								// 이 경우는 T-레코드 마지막 부분에 명령어 일부만 있는 경우 (오류)
+								// 표시하지 않고 현재 T-레코드 영역 처리 종료
 								break;
 							}
 
+							// 유효한 길이의 명령어(또는 데이터 워드/바이트가 명령어로 해석된 경우)만 표시
 							StringBuilder currentInstructionHex = new StringBuilder();
 							for (int k = 0; k < instructionLen; k++) {
 								currentInstructionHex.append(String.format("%02X", regionMemoryBytes[currentOffsetInRegion + k] & 0xFF));

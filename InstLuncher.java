@@ -359,8 +359,8 @@ public class InstLuncher {
             }
             // 첫 번째 루프에서 M[RETADR]이 0x000000 이었다면, PC는 0으로 감.
             // 이 경우에도 무한 루프의 시작이므로, 명시적으로 0으로 점프 시 종료
-            if (jumpToAddress == 0x000000 && rMgr.getRegister(ResourceManager.REG_L) == 0x000027) { // L 레지스터가 J @RETADR 주소라면, 이전 STL에서 0을 저장했음을 의미.
-                lastExecutedInstructionInfo += " (Program end detected: J @RETADR to 0x000000 via RETADR=0, halting)";
+            if (jumpToAddress == 0x000000) {
+                lastExecutedInstructionInfo += " (Program end: J @RETADR to 0x000000 via initial RETADR, halting)";
                 return NORMAL_HALT;
             }
         }
