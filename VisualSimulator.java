@@ -1,14 +1,26 @@
 package SP25_simulator;
 
 import javax.swing.*;
-import javax.swing.border.EmptyBorder;
 import javax.swing.text.DefaultCaret;
+import javax.swing.text.Highlighter;
+import javax.swing.text.DefaultHighlighter;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+
+// 명령어 목록 표시 및 현재 PC 포인팅을 위한 간단한 내부 클래스
+class InstructionDisplayItem {
+	int startAddress;       // 이 명령어가 메모리에서 시작하는 실제 주소
+	String objectCodeHex;   // 표시될 오브젝트 코드 문자열
+	int originalLineNumber; // JTextArea에서의 원래 줄 번호 (하이라이트용)
+
+	public InstructionDisplayItem(int startAddress, String objectCodeHex, int originalLineNumber) {
+		this.startAddress = startAddress;
+		this.objectCodeHex = objectCodeHex;
+		this.originalLineNumber = originalLineNumber;
+	}
+}
 
 public class VisualSimulator extends JFrame {
 	ResourceManager resourceManager;
@@ -28,10 +40,17 @@ public class VisualSimulator extends JFrame {
 	private JTextField deviceStatusField;
 	private JTextArea logArea;
 
+	// 명령어 목록 및 하이라이트 관련 필드
+	private List<InstructionDisplayItem> instructionDisplayList;
+	private Highlighter.HighlightPainter currentPcHighlightPainter;
+	private Object lastHighlightTag = null;
+
 	public VisualSimulator() {
 		resourceManager = new ResourceManager();
 		sicLoader = new SicLoader(resourceManager);
 		sicSimulator = new SicSimulator(resourceManager);
+		instructionDisplayList = new ArrayList<>();
+		currentPcHighlightPainter = new DefaultHighlighter.DefaultHighlightPainter(Color.YELLOW); // 하이라이트 색상
 
 		setTitle("SIC/XE Simulator (SP25_Project2)");
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -47,6 +66,7 @@ public class VisualSimulator extends JFrame {
 	}
 
 	private void initComponents() {
+		// ... (이전과 동일) ...
 		fileNameField = new JTextField(20); fileNameField.setEditable(false); openButton = new JButton("open");
 		progNameFieldH = new JTextField(6); progNameFieldH.setEditable(false); progNameFieldH.setHorizontalAlignment(JTextField.CENTER);
 		startAddrObjFieldH = new JTextField(6); startAddrObjFieldH.setEditable(false); startAddrObjFieldH.setHorizontalAlignment(JTextField.CENTER);
@@ -69,7 +89,7 @@ public class VisualSimulator extends JFrame {
 		DefaultCaret logCaret = (DefaultCaret)logArea.getCaret(); logCaret.setUpdatePolicy(DefaultCaret.ALWAYS_UPDATE);
 	}
 
-	private void layoutComponents() {
+	private void layoutComponents() { /* 이전과 동일 */
 		setLayout(new GridBagLayout()); GridBagConstraints gbc = new GridBagConstraints(); gbc.insets = new Insets(3,5,3,5); gbc.anchor = GridBagConstraints.WEST;
 		gbc.gridx = 0; gbc.gridy = 0; add(new JLabel("FileName :"), gbc); gbc.gridx = 1; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0; add(fileNameField, gbc); gbc.gridx = 3; gbc.gridwidth = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0; add(openButton, gbc);
 		JPanel hPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5,2)); hPanel.setBorder(BorderFactory.createTitledBorder("H (Header Record)")); hPanel.add(new JLabel("Program name:")); hPanel.add(progNameFieldH); hPanel.add(new JLabel("Start Address(obj):")); hPanel.add(startAddrObjFieldH); hPanel.add(new JLabel("Length:")); hPanel.add(progLengthFieldH); gbc.gridy = 1; gbc.gridwidth = 4; gbc.fill = GridBagConstraints.HORIZONTAL; add(hPanel, gbc);
@@ -83,14 +103,18 @@ public class VisualSimulator extends JFrame {
 		gbc.gridx = 1; gbc.gridy = 3; gbc.gridwidth = 3; gbc.gridheight = 2; gbc.fill = GridBagConstraints.BOTH; gbc.anchor = GridBagConstraints.NORTHWEST; gbc.weightx = 0.7; gbc.weighty = 1.0; add(rightPanel, gbc);
 		JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 5)); buttonPanel.add(runOneStepButton); buttonPanel.add(runAllButton); buttonPanel.add(exitButton); gbc.gridx = 0; gbc.gridy = 5; gbc.gridwidth = 4; gbc.gridheight = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.anchor = GridBagConstraints.CENTER; gbc.weightx = 1.0; gbc.weighty = 0; add(buttonPanel, gbc);
 	}
-	private void addListeners() {
+	private void addListeners() { /* 이전과 동일 */
 		openButton.addActionListener(e -> {JFileChooser fc=new JFileChooser(".");fc.setDialogTitle("Open SIC/XE Object Code File");if(fc.showOpenDialog(VisualSimulator.this)==JFileChooser.APPROVE_OPTION){load(fc.getSelectedFile());}});
 		runOneStepButton.addActionListener(e -> oneStep()); runAllButton.addActionListener(e -> allStep());
 		exitButton.addActionListener(e -> {resourceManager.closeAllDevices();System.exit(0);});
 	}
 
 	public void load(File program) {
-		logToGui(""); instructionCodeArea.setText("");
+		logToGui("");
+		instructionCodeArea.setText("");
+		instructionDisplayList.clear(); // 새 파일 로드 시 이전 목록 초기화
+		removeCurrentPcHighlight(); // 이전 하이라이트 제거
+
 		if (program == null) { logToGui("[Error] Program file is null."); return; }
 		currentObjectCodeFile = program; fileNameField.setText(program.getName());
 		try {
@@ -106,9 +130,10 @@ public class VisualSimulator extends JFrame {
 
 				StringBuilder instructionsDisplayText = new StringBuilder();
 				List<MemoryRegion> loadedRegions = resourceManager.getTRecordLoadedRegions();
+				int currentLineNumberForHighlight = 0;
 
 				if (loadedRegions.isEmpty() && resourceManager.getProgramTotalLength() > 0) {
-					instructionCodeArea.setText("(No T-records with content found or T-regions not registered)");
+					instructionCodeArea.setText("(No T-records with content or T-regions not registered)");
 				} else {
 					for (MemoryRegion region : loadedRegions) {
 						byte[] regionMemoryBytes = resourceManager.getMemoryBytes(region.getStartAddress(), region.getLength());
@@ -116,8 +141,9 @@ public class VisualSimulator extends JFrame {
 
 						int currentOffsetInRegion = 0;
 						while (currentOffsetInRegion < regionMemoryBytes.length) {
+							int actualMemoryAddressForThisInstruction = region.getStartAddress() + currentOffsetInRegion;
 							int bytesAvailableToPeek = regionMemoryBytes.length - currentOffsetInRegion;
-							int bytesToPeek = Math.min(4, bytesAvailableToPeek); // Max SIC/XE instruction length
+							int bytesToPeek = Math.min(4, bytesAvailableToPeek);
 
 							if (bytesToPeek <= 0) break;
 
@@ -127,68 +153,151 @@ public class VisualSimulator extends JFrame {
 							int instructionLen = InstLuncher.getInstructionLengthFromBytes(instructionPrefixBytes);
 
 							if (instructionLen == 0) {
-								// 길이 판단 불가 시 (데이터 또는 리터럴 가능성 높음), 해당 바이트를 표시하지 않고 건너뜀.
 								if (bytesAvailableToPeek > 0) {
-									currentOffsetInRegion += 1; // 최소 1바이트 건너뛰고 다음 바이트에서 다시 시도
+									currentOffsetInRegion += 1;
 									continue;
 								}
 								break;
 							}
 
-							// 명령어 길이가 현재 T-레코드 영역의 남은 바이트를 초과하는지 확인
 							if (currentOffsetInRegion + instructionLen > regionMemoryBytes.length) {
-								// 이 경우는 T-레코드 마지막 부분에 명령어 일부만 있는 경우 (오류)
-								// 표시하지 않고 현재 T-레코드 영역 처리 종료
 								break;
 							}
 
-							// 유효한 길이의 명령어(또는 데이터 워드/바이트가 명령어로 해석된 경우)만 표시
 							StringBuilder currentInstructionHex = new StringBuilder();
 							for (int k = 0; k < instructionLen; k++) {
 								currentInstructionHex.append(String.format("%02X", regionMemoryBytes[currentOffsetInRegion + k] & 0xFF));
 							}
-							instructionsDisplayText.append(currentInstructionHex.toString()).append("\n");
+							String hexString = currentInstructionHex.toString();
+							instructionsDisplayText.append(hexString).append("\n");
+							instructionDisplayList.add(new InstructionDisplayItem(actualMemoryAddressForThisInstruction, hexString, currentLineNumberForHighlight));
+							currentLineNumberForHighlight++;
+
 							currentOffsetInRegion += instructionLen;
 						}
 					}
 				}
 				instructionCodeArea.setText(instructionsDisplayText.toString());
 				instructionCodeArea.setCaretPosition(0);
+				// 로드 후 첫 PC 위치 하이라이트
+				highlightCurrentPc();
 
 			} else { logToGui("[Error] Failed to load program details."); runOneStepButton.setEnabled(false); runAllButton.setEnabled(false); }
 		} catch (Exception e) { logToGui("[Error] Load: " + e.getMessage()); e.printStackTrace(System.err); runOneStepButton.setEnabled(false); runAllButton.setEnabled(false); }
-		update();
+		update(); // update는 레지스터 값 등을 표시하므로 load 후 호출
+	}
+
+	private void highlightCurrentPc() {
+		removeCurrentPcHighlight(); // 이전 하이라이트 제거
+		int currentPc = resourceManager.getRegister(ResourceManager.REG_PC);
+		for (InstructionDisplayItem item : instructionDisplayList) {
+			if (item.startAddress == currentPc) {
+				try {
+					int start = instructionCodeArea.getLineStartOffset(item.originalLineNumber);
+					int end = instructionCodeArea.getLineEndOffset(item.originalLineNumber);
+					if (end > start) end--; // 개행 문자 제외
+					lastHighlightTag = instructionCodeArea.getHighlighter().addHighlight(start, end, currentPcHighlightPainter);
+					instructionCodeArea.setCaretPosition(start); // 캐럿도 해당 위치로 이동
+					instructionCodeArea.scrollRectToVisible(instructionCodeArea.modelToView(start)); // 해당 줄이 보이도록 스크롤
+				} catch (Exception e) {
+					// System.err.println("Highlighting error: " + e.getMessage());
+				}
+				break;
+			}
+		}
+	}
+
+	private void removeCurrentPcHighlight() {
+		if (lastHighlightTag != null) {
+			instructionCodeArea.getHighlighter().removeHighlight(lastHighlightTag);
+			lastHighlightTag = null;
+		}
 	}
 
 	public void oneStep() {
-		if (sicSimulator.isReadyToRun()) { if (!sicSimulator.oneStep()) { runOneStepButton.setEnabled(false); runAllButton.setEnabled(false); } update();
-		} else { logToGui("Program not ready/finished."); runOneStepButton.setEnabled(false); runAllButton.setEnabled(false); }
+		if (sicSimulator.isReadyToRun()) {
+			if (!sicSimulator.oneStep()) {
+				runOneStepButton.setEnabled(false);
+				runAllButton.setEnabled(false);
+			}
+			update(); // 레지스터 등 GUI 업데이트
+			highlightCurrentPc(); // PC 변경 후 하이라이트 업데이트
+		} else {
+			logToGui("Program not ready/finished.");
+			runOneStepButton.setEnabled(false);
+			runAllButton.setEnabled(false);
+		}
 	}
+
 	public void allStep() {
-		if (sicSimulator.isReadyToRun()) { logToGui("--- Starting All Step ---"); runOneStepButton.setEnabled(false); runAllButton.setEnabled(false);
+		if (sicSimulator.isReadyToRun()) {
+			logToGui("--- Starting All Step ---");
+			runOneStepButton.setEnabled(false); // 실행 중에는 버튼 비활성화
+			runAllButton.setEnabled(false);
+
 			new SwingWorker<Void, Void>() {
-				@Override protected Void doInBackground() throws Exception { while(sicSimulator.isReadyToRun()){ if (!sicSimulator.oneStep()) break; if (isCancelled()) break; } return null; }
-				@Override protected void done() { try { get(); } catch (Exception e) { logToGui("[Error]AllStep:"+e.getMessage());e.printStackTrace(System.err); } update(); if (!sicSimulator.isReadyToRun()) { runOneStepButton.setEnabled(false); runAllButton.setEnabled(false); } logToGui("--- All Step Finished ---"); }
+				@Override
+				protected Void doInBackground() throws Exception {
+					while(sicSimulator.isReadyToRun()){
+						if (!sicSimulator.oneStep()) break;
+						// 각 스텝 후 GUI 업데이트 및 하이라이트를 Event Dispatch Thread에서 처리
+						SwingUtilities.invokeLater(() -> {
+							update();
+							highlightCurrentPc();
+						});
+						if (isCancelled()) break;
+						// Thread.sleep(50); // 너무 빠르면 GUI 업데이트가 안보일 수 있으므로 약간의 딜레이 (선택적)
+					}
+					return null;
+				}
+				@Override
+				protected void done() {
+					try { get(); } catch (Exception e) { logToGui("[Error]AllStep:"+e.getMessage());e.printStackTrace(System.err); }
+					// 최종 상태 업데이트
+					SwingUtilities.invokeLater(() -> {
+						update();
+						highlightCurrentPc();
+						if (!sicSimulator.isReadyToRun()) {
+							runOneStepButton.setEnabled(false);
+							runAllButton.setEnabled(false);
+						} else {
+							runOneStepButton.setEnabled(true); // 아직 실행 가능하면 버튼 다시 활성화
+							runAllButton.setEnabled(true);
+						}
+						logToGui("--- All Step Finished ---");
+					});
+				}
 			}.execute();
 		} else { logToGui("Program not ready/finished."); }
 	}
+
 	public void update() {
+		// ... (기존 update 내용 동일) ...
 		progNameFieldH.setText(resourceManager.getProgramName()); startAddrObjFieldH.setText(String.format("%06X", resourceManager.getHRecordObjectProgramStartAddress())); progLengthFieldH.setText(String.format("%06X", resourceManager.getProgramTotalLength()));
 		firstInstAddrFieldE.setText(String.format("%06X", resourceManager.getFirstInstructionAddress())); startAddrMemFieldE.setText(String.format("%06X", resourceManager.getActualProgramLoadAddress()));
 		updateRegisterField(ResourceManager.REG_A, 0, 6); updateRegisterField(ResourceManager.REG_X, 1, 6); updateRegisterField(ResourceManager.REG_L, 2, 6); updateRegisterField(ResourceManager.REG_B, 3, 6); updateRegisterField(ResourceManager.REG_S, 4, 6); updateRegisterField(ResourceManager.REG_T, 5, 6);
 		double fVal = resourceManager.getRegister_F(); regDecFields[6].setText(String.format("%.5e", fVal)); regHexFields[6].setText(String.format("%012X", Double.doubleToRawLongBits(fVal)).substring(0,12));
 		updateRegisterField(ResourceManager.REG_PC, 7, 6); updateRegisterField(ResourceManager.REG_SW, 8, 6);
 		int lastTA = (sicSimulator.instLuncher != null) ? sicSimulator.instLuncher.getLastCalculatedTA() : InstLuncher.TA_NOT_CALCULATED_YET; targetAddrField.setText((lastTA != InstLuncher.TA_NOT_CALCULATED_YET) ? String.format("%06X", lastTA) : "000000");
-		deviceStatusField.setText(resourceManager.getLastAccessedDeviceName()); logArea.setText(""); if (sicSimulator.getExecutionLog() != null) { for (String guiLogEntry : sicSimulator.getExecutionLog()) { logArea.append(guiLogEntry + "\n"); } }
+		deviceStatusField.setText(resourceManager.getLastAccessedDeviceName());
+
+		// LogArea 업데이트는 SicSimulator에서 직접 하지 않고, 여기서 getExecutionLog()를 통해 가져와서 표시
+		logArea.setText(""); // 기존 로그 지우기
+		if (sicSimulator.getExecutionLog() != null) {
+			for (String guiLogEntry : sicSimulator.getExecutionLog()) {
+				logArea.append(guiLogEntry + "\n");
+			}
+		}
 	}
-	private void updateRegisterField(int regConst, int fieldIndex, int hexDigits) {
+
+	private void updateRegisterField(int regConst, int fieldIndex, int hexDigits) { /* 이전과 동일 */
 		if (fieldIndex < 0 || fieldIndex >= regDecFields.length || fieldIndex >= regHexFields.length) { System.err.println("VS.updateRegField: Invalid fieldIdx " + fieldIndex + " for regConst " + regConst); return; } int val = resourceManager.getRegister(regConst);
 		regDecFields[fieldIndex].setText(Integer.toString(val)); regHexFields[fieldIndex].setText(String.format("%0" + hexDigits + "X", val & 0xFFFFFF));
 	}
-	private void logToGui(String message) {
+	private void logToGui(String message) { /* 이전과 동일 */
 		if (logArea.getText().length() > 10000) { try { int end = logArea.getLineEndOffset(50); logArea.replaceRange("", 0, end); } catch (Exception e) { logArea.setText(""); } } logArea.append(message + "\n");
 	}
-	public static void main(String[] args) {
+	public static void main(String[] args) { /* 이전과 동일 */
 		EventQueue.invokeLater(() -> { try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); } catch (Exception e) { System.err.println("Warn: Could not set system LnF."); } VisualSimulator frame = new VisualSimulator(); frame.setVisible(true); });
 	}
 }
