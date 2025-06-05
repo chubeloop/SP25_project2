@@ -83,7 +83,7 @@ public class SicLoader {
 				// *** numBytesToModify 선언 및 초기화 위치 수정/확인 ***
 				int numBytesToModify = (mRec.lengthHalfBytes + 1) / 2;
 				if (actModMemAddr < 0 || actModMemAddr + numBytesToModify > rMgr.memory.length) {System.err.println("SicLoader: MRec Addr OOB 0x"+Integer.toHexString(actModMemAddr)); continue; }
-				byte[] origBytes = rMgr.getMemoryBytes(actModMemAddr, numBytesToModify); if(origBytes.length<numBytesToModify){System.err.println("SicLoader: MRec - Read orig failed 0x"+Integer.toHexString(actModMemAddr));continue;}
+				byte[] origBytes = rMgr.getMemory(actModMemAddr, numBytesToModify); if(origBytes.length<numBytesToModify){System.err.println("SicLoader: MRec - Read orig failed 0x"+Integer.toHexString(actModMemAddr));continue;}
 				long origValSeg = 0;
 				if (mRec.lengthHalfBytes == 5) { origValSeg = ((long)(origBytes[0]&0x0F)<<16)|((long)(origBytes[1]&0xFF)<<8)|((long)(origBytes[2]&0xFF)); }
 				else if (mRec.lengthHalfBytes == 6) { origValSeg = ((long)(origBytes[0]&0xFF)<<16)|((long)(origBytes[1]&0xFF)<<8)|((long)(origBytes[2]&0xFF)); }
@@ -92,7 +92,7 @@ public class SicLoader {
 				byte[] newBytes = new byte[numBytesToModify]; // 여기서 numBytesToModify 사용
 				if(mRec.lengthHalfBytes==5){newBytes[0]=(byte)((origBytes[0]&0xF0)|((modValSeg>>16)&0x0F));newBytes[1]=(byte)((modValSeg>>8)&0xFF);newBytes[2]=(byte)(modValSeg&0xFF);}
 				else {modValSeg&=0xFFFFFFL;newBytes[0]=(byte)((modValSeg>>16)&0xFF);newBytes[1]=(byte)((modValSeg>>8)&0xFF);newBytes[2]=(byte)(modValSeg&0xFF);}
-				rMgr.setMemoryBytes(actModMemAddr, newBytes, numBytesToModify); // 마지막 인자도 numBytesToModify
+				rMgr.setMemory(actModMemAddr, newBytes, numBytesToModify); // 마지막 인자도 numBytesToModify
 			}
 			if (!firstExecutionAddressSet && rMgr.getProgramName() != null && !rMgr.getProgramName().isEmpty()) { rMgr.setFirstInstructionAddress(rMgr.getActualProgramLoadAddress()); }
 			rMgr.setProgramTotalLength(this.programTotalCumulativeLength);

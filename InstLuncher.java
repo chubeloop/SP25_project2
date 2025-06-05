@@ -57,7 +57,7 @@ public class InstLuncher {
             return ERROR_HALT;
         }
 
-        byte[] firstByteArr = rMgr.getMemoryBytes(pc, 1);
+        byte[] firstByteArr = rMgr.getMemory(pc, 1);
         if (firstByteArr.length < 1) {
             lastErrorMessage = "Failed to fetch opcode byte at PC: 0x" + String.format("%06X", pc);
             return ERROR_HALT;
@@ -82,7 +82,7 @@ public class InstLuncher {
             return ERROR_HALT;
         }
 
-        byte[] instructionBytes = rMgr.getMemoryBytes(pc, instructionLength);
+        byte[] instructionBytes = rMgr.getMemory(pc, instructionLength);
         if (instructionBytes.length < instructionLength) {
             lastErrorMessage = "Failed to fetch full " + instructionLength + "-byte instruction at PC 0x" +
                     String.format("%06X", pc) + ". Fetched only " + instructionBytes.length + " bytes.";
@@ -158,7 +158,7 @@ public class InstLuncher {
                     lastErrorMessage = "Cannot determine F3/F4 length: PC+1 out of bounds for nixbpe byte.";
                     return 0;
                 }
-                byte[] nixbpeByteArr = rMgr.getMemoryBytes(pc + 1, 1);
+                byte[] nixbpeByteArr = rMgr.getMemory(pc + 1, 1);
                 if (nixbpeByteArr.length < 1) {
                     lastErrorMessage = "Failed to fetch nixbpe byte for F3/F4 length determination."; return 0;
                 }
@@ -301,7 +301,7 @@ public class InstLuncher {
             if (finalAddress < 0 || finalAddress + 2 >= rMgr.memory.length) {
                 lastErrorMessage = "TA calc error: Indirect pointer 0x" + String.format("%06X", finalAddress) + " out of bounds."; return null;
             }
-            byte[] indirectPointerBytes = rMgr.getMemoryBytes(finalAddress, 3);
+            byte[] indirectPointerBytes = rMgr.getMemory(finalAddress, 3);
             finalAddress = rMgr.bytesToInt(indirectPointerBytes);
             effectiveAddressLog = String.format(" -> TA_ptr=0x%06X, M[TA_ptr]=0x%06X", targetAddressOperand & 0xFFFFFF, finalAddress & 0xFFFFFF);
         }
@@ -328,7 +328,7 @@ public class InstLuncher {
             lastErrorMessage="Memory Read OutOfBounds: addr=0x"+String.format("%06X",address)+", len="+length;
             return 0;
         }
-        return rMgr.bytesToInt(rMgr.getMemoryBytes(address,length));
+        return rMgr.bytesToInt(rMgr.getMemory(address,length));
     }
 
     private void intToMemBytes(int address, int value, int length) {
@@ -336,8 +336,8 @@ public class InstLuncher {
             lastErrorMessage="Memory Write OutOfBounds: addr=0x"+String.format("%06X",address)+", len="+length;
             return;
         }
-        if(length==1) rMgr.setMemoryBytes(address,new byte[]{(byte)(value&0xFF)},1);
-        else if(length==3) rMgr.setMemoryBytes(address,rMgr.intToBytes(value),3);
+        if(length==1) rMgr.setMemory(address,new byte[]{(byte)(value&0xFF)},1);
+        else if(length==3) rMgr.setMemory(address,rMgr.intToBytes(value),3);
         else lastErrorMessage="Unsupported length for intToMemBytes: " + length;
     }
 
@@ -348,14 +348,14 @@ public class InstLuncher {
     private int handleLDB(int pc, byte[] iB, int l, int oF) { TargetAddressInfo taInfo=calculateTargetAddress(pc,iB,l,oF); if(taInfo==null)return ERROR_HALT; int val; if(taInfo.isImmediate)val=taInfo.address; else {if(taInfo.address<0||taInfo.address+2>=rMgr.memory.length){lastErrorMessage="LDB: Mem OOB @0x"+String.format("%06X",taInfo.address);return ERROR_HALT;}val=memToSignedInt(taInfo.address,3);} rMgr.setRegister(ResourceManager.REG_B,val);lastExecutedInstructionInfo+=String.format(" ; B <- 0x%06X",val&0xFFFFFF);return pc+l; }
     private int handleLDS(int pc, byte[] iB, int l, int oF) { TargetAddressInfo taInfo=calculateTargetAddress(pc,iB,l,oF); if(taInfo==null)return ERROR_HALT; int val; if(taInfo.isImmediate)val=taInfo.address; else {if(taInfo.address<0||taInfo.address+2>=rMgr.memory.length){lastErrorMessage="LDS: Mem OOB @0x"+String.format("%06X",taInfo.address);return ERROR_HALT;}val=memToSignedInt(taInfo.address,3);} rMgr.setRegister(ResourceManager.REG_S,val);lastExecutedInstructionInfo+=String.format(" ; S <- 0x%06X",val&0xFFFFFF);return pc+l; }
     private int handleLDT(int pc, byte[] iB, int l, int oF) { TargetAddressInfo taInfo=calculateTargetAddress(pc,iB,l,oF); if(taInfo==null)return ERROR_HALT; int val; if(taInfo.isImmediate)val=taInfo.address; else {if(taInfo.address<0||taInfo.address+2>=rMgr.memory.length){lastErrorMessage="LDT: Mem OOB @0x"+String.format("%06X",taInfo.address);return ERROR_HALT;}val=memToSignedInt(taInfo.address,3);} rMgr.setRegister(ResourceManager.REG_T,val);lastExecutedInstructionInfo+=String.format(" ; T <- 0x%06X",val&0xFFFFFF);return pc+l; }
-    private int handleLDCH(int pc, byte[] iB, int l, int oF) { TargetAddressInfo taInfo = calculateTargetAddress(pc,iB,l,oF); if(taInfo==null)return ERROR_HALT; int charVal; if(taInfo.isImmediate)charVal=taInfo.address&0xFF; else {if(taInfo.address<0||taInfo.address>=rMgr.memory.length){lastErrorMessage="LDCH: Mem OOB @0x"+String.format("%06X",taInfo.address);return ERROR_HALT;}charVal=rMgr.getMemoryBytes(taInfo.address,1)[0]&0xFF;} rMgr.setRegister(ResourceManager.REG_A,(rMgr.getRegister(ResourceManager.REG_A)&0xFFFF00)|charVal);lastExecutedInstructionInfo+=String.format(" ; A_byte3 <- 0x%02X",charVal);return pc+l;}
+    private int handleLDCH(int pc, byte[] iB, int l, int oF) { TargetAddressInfo taInfo = calculateTargetAddress(pc,iB,l,oF); if(taInfo==null)return ERROR_HALT; int charVal; if(taInfo.isImmediate)charVal=taInfo.address&0xFF; else {if(taInfo.address<0||taInfo.address>=rMgr.memory.length){lastErrorMessage="LDCH: Mem OOB @0x"+String.format("%06X",taInfo.address);return ERROR_HALT;}charVal=rMgr.getMemory(taInfo.address,1)[0]&0xFF;} rMgr.setRegister(ResourceManager.REG_A,(rMgr.getRegister(ResourceManager.REG_A)&0xFFFF00)|charVal);lastExecutedInstructionInfo+=String.format(" ; A_byte3 <- 0x%02X",charVal);return pc+l;}
     private int handleSTA(int pc, byte[] iB, int l, int oF) {TargetAddressInfo taInfo=calculateTargetAddress(pc,iB,l,oF);if(taInfo==null||taInfo.isImmediate){lastErrorMessage="STA: Invalid TA";return ERROR_HALT;} if(taInfo.address<0||taInfo.address+2>=rMgr.memory.length){lastErrorMessage="STA: Mem Write OOB @0x"+String.format("%06X",taInfo.address);return ERROR_HALT;}intToMemBytes(taInfo.address,rMgr.getRegister(ResourceManager.REG_A),3);lastExecutedInstructionInfo+=String.format(" ; M[0x%06X] <- A(0x%06X)",taInfo.address,rMgr.getRegister(ResourceManager.REG_A)&0xFFFFFF);return pc+l;}
     private int handleSTX(int pc, byte[] iB, int l, int oF) {TargetAddressInfo taInfo=calculateTargetAddress(pc,iB,l,oF);if(taInfo==null||taInfo.isImmediate){lastErrorMessage="STX: Invalid TA";return ERROR_HALT;} if(taInfo.address<0||taInfo.address+2>=rMgr.memory.length){lastErrorMessage="STX: Mem Write OOB @0x"+String.format("%06X",taInfo.address);return ERROR_HALT;}intToMemBytes(taInfo.address,rMgr.getRegister(ResourceManager.REG_X),3);lastExecutedInstructionInfo+=String.format(" ; M[0x%06X] <- X(0x%06X)",taInfo.address,rMgr.getRegister(ResourceManager.REG_X)&0xFFFFFF);return pc+l;}
     private int handleSTL(int pc, byte[] iB, int l, int oF) {TargetAddressInfo taInfo=calculateTargetAddress(pc,iB,l,oF);if(taInfo==null||taInfo.isImmediate){lastErrorMessage="STL: Invalid TA";return ERROR_HALT;} if(taInfo.address<0||taInfo.address+2>=rMgr.memory.length){lastErrorMessage="STL: Mem Write OOB @0x"+String.format("%06X",taInfo.address);return ERROR_HALT;}intToMemBytes(taInfo.address,rMgr.getRegister(ResourceManager.REG_L),3);lastExecutedInstructionInfo+=String.format(" ; M[0x%06X] <- L(0x%06X)",taInfo.address,rMgr.getRegister(ResourceManager.REG_L)&0xFFFFFF);return pc+l;}
     private int handleSTB(int pc, byte[] iB, int l, int oF) {TargetAddressInfo taInfo=calculateTargetAddress(pc,iB,l,oF);if(taInfo==null||taInfo.isImmediate){lastErrorMessage="STB: Invalid TA";return ERROR_HALT;} if(taInfo.address<0||taInfo.address+2>=rMgr.memory.length){lastErrorMessage="STB: Mem Write OOB @0x"+String.format("%06X",taInfo.address);return ERROR_HALT;}intToMemBytes(taInfo.address,rMgr.getRegister(ResourceManager.REG_B),3);lastExecutedInstructionInfo+=String.format(" ; M[0x%06X] <- B(0x%06X)",taInfo.address,rMgr.getRegister(ResourceManager.REG_B)&0xFFFFFF);return pc+l;}
     private int handleSTS(int pc, byte[] iB, int l, int oF) {TargetAddressInfo taInfo=calculateTargetAddress(pc,iB,l,oF);if(taInfo==null||taInfo.isImmediate){lastErrorMessage="STS: Invalid TA";return ERROR_HALT;} if(taInfo.address<0||taInfo.address+2>=rMgr.memory.length){lastErrorMessage="STS: Mem Write OOB @0x"+String.format("%06X",taInfo.address);return ERROR_HALT;}intToMemBytes(taInfo.address,rMgr.getRegister(ResourceManager.REG_S),3);lastExecutedInstructionInfo+=String.format(" ; M[0x%06X] <- S(0x%06X)",taInfo.address,rMgr.getRegister(ResourceManager.REG_S)&0xFFFFFF);return pc+l;}
     private int handleSTT(int pc, byte[] iB, int l, int oF) {TargetAddressInfo taInfo=calculateTargetAddress(pc,iB,l,oF);if(taInfo==null||taInfo.isImmediate){lastErrorMessage="STT: Invalid TA";return ERROR_HALT;} if(taInfo.address<0||taInfo.address+2>=rMgr.memory.length){lastErrorMessage="STT: Mem Write OOB @0x"+String.format("%06X",taInfo.address);return ERROR_HALT;}intToMemBytes(taInfo.address,rMgr.getRegister(ResourceManager.REG_T),3);lastExecutedInstructionInfo+=String.format(" ; M[0x%06X] <- T(0x%06X)",taInfo.address,rMgr.getRegister(ResourceManager.REG_T)&0xFFFFFF);return pc+l;}
-    private int handleSTCH(int pc, byte[] iB, int l, int oF) {TargetAddressInfo taInfo=calculateTargetAddress(pc,iB,l,oF);if(taInfo==null||taInfo.isImmediate){lastErrorMessage="STCH: Invalid TA";return ERROR_HALT;} if(taInfo.address<0||taInfo.address>=rMgr.memory.length){lastErrorMessage="STCH: Mem Write OOB @0x"+String.format("%06X",taInfo.address);return ERROR_HALT;}byte charToStore=(byte)(rMgr.getRegister(ResourceManager.REG_A)&0xFF);rMgr.setMemoryBytes(taInfo.address,new byte[]{charToStore},1);lastExecutedInstructionInfo+=String.format(" ; M[0x%06X]_byte <- A_b3(0x%02X)",taInfo.address,charToStore&0xFF);return pc+l;}
+    private int handleSTCH(int pc, byte[] iB, int l, int oF) {TargetAddressInfo taInfo=calculateTargetAddress(pc,iB,l,oF);if(taInfo==null||taInfo.isImmediate){lastErrorMessage="STCH: Invalid TA";return ERROR_HALT;} if(taInfo.address<0||taInfo.address>=rMgr.memory.length){lastErrorMessage="STCH: Mem Write OOB @0x"+String.format("%06X",taInfo.address);return ERROR_HALT;}byte charToStore=(byte)(rMgr.getRegister(ResourceManager.REG_A)&0xFF);rMgr.setMemory(taInfo.address,new byte[]{charToStore},1);lastExecutedInstructionInfo+=String.format(" ; M[0x%06X]_byte <- A_b3(0x%02X)",taInfo.address,charToStore&0xFF);return pc+l;}
     private int handleSTSW(int pc, byte[] iB, int l, int oF) {TargetAddressInfo taInfo=calculateTargetAddress(pc,iB,l,oF);if(taInfo==null||taInfo.isImmediate){lastErrorMessage="STSW: Invalid TA";return ERROR_HALT;} if(taInfo.address<0||taInfo.address+2>=rMgr.memory.length){lastErrorMessage="STSW: Mem Write OOB @0x"+String.format("%06X",taInfo.address);return ERROR_HALT;}intToMemBytes(taInfo.address,rMgr.getRegister(ResourceManager.REG_SW),3);lastExecutedInstructionInfo+=String.format(" ; M[0x%06X] <- SW(0x%06X)",taInfo.address,rMgr.getRegister(ResourceManager.REG_SW)&0xFFFFFF);return pc+l;}
     private int handleADD(int pc, byte[] iB, int l, int oF) {TargetAddressInfo taInfo=calculateTargetAddress(pc,iB,l,oF);if(taInfo==null)return ERROR_HALT; int val; if(taInfo.isImmediate)val=taInfo.address; else {if(taInfo.address<0||taInfo.address+2>=rMgr.memory.length){lastErrorMessage="ADD: Mem OOB @0x"+String.format("%06X",taInfo.address);return ERROR_HALT;}val=memToSignedInt(taInfo.address,3);} int curA=rMgr.getRegister(ResourceManager.REG_A);long res=(long)curA+val;rMgr.setRegister(ResourceManager.REG_A,(int)(res&0xFFFFFF));lastExecutedInstructionInfo+=String.format(" ; A<-A+M(0x%06X+0x%06X=0x%06X)",curA&0xFFFFFF,val&0xFFFFFF,(int)res&0xFFFFFF);return pc+l;}
     private int handleSUB(int pc, byte[] iB, int l, int oF) {TargetAddressInfo taInfo=calculateTargetAddress(pc,iB,l,oF);if(taInfo==null)return ERROR_HALT; int val; if(taInfo.isImmediate)val=taInfo.address; else {if(taInfo.address<0||taInfo.address+2>=rMgr.memory.length){lastErrorMessage="SUB: Mem OOB @0x"+String.format("%06X",taInfo.address);return ERROR_HALT;}val=memToSignedInt(taInfo.address,3);} int curA=rMgr.getRegister(ResourceManager.REG_A);long res=(long)curA-val;rMgr.setRegister(ResourceManager.REG_A,(int)(res&0xFFFFFF));lastExecutedInstructionInfo+=String.format(" ; A<-A-M(0x%06X-0x%06X=0x%06X)",curA&0xFFFFFF,val&0xFFFFFF,(int)res&0xFFFFFF);return pc+l;}
@@ -413,14 +413,14 @@ public class InstLuncher {
     private int handleTD(int pc, byte[] iB, int l, int oF) {
         TargetAddressInfo ta = calculateTargetAddress(pc,iB,l,oF); if(ta==null || ta.isImmediate){lastErrorMessage="TD: Invalid TA (must be memory address to get Device ID)"; return ERROR_HALT;}
         if(ta.address<0||ta.address>=rMgr.memory.length){lastErrorMessage="TD: Memory OutOfBounds for DeviceID at 0x"+String.format("%06X",ta.address); return ERROR_HALT;}
-        byte devId=rMgr.getMemoryBytes(ta.address,1)[0]; String devName=String.format("%02X",devId&0xFF);
+        byte devId=rMgr.getMemory(ta.address,1)[0]; String devName=String.format("%02X",devId&0xFF);
         boolean ready=rMgr.testDevice(devName);
         if(ready) setConditionCode(-1); else setConditionCode(0);
         lastExecutedInstructionInfo+=String.format("(Dev '%s'@M[0x%06X]=0x%02X).Ready=%b;CC=%s",devName,ta.address,devId&0xFF,ready,getCCString());
         return pc+l;
     }
-    private int handleRD(int pc, byte[] iB, int l, int oF) {TargetAddressInfo taInfo=calculateTargetAddress(pc,iB,l,oF);if(taInfo==null||taInfo.isImmediate){lastErrorMessage="RD: Invalid TA";return ERROR_HALT;} if(taInfo.address<0||taInfo.address>=rMgr.memory.length){lastErrorMessage="RD: Mem OOB for DeviceID";return ERROR_HALT;} byte devId=rMgr.getMemoryBytes(taInfo.address,1)[0];String devName=String.format("%02X",devId&0xFF);char[]dataRead=rMgr.readDevice(devName,1);if(dataRead!=null&&dataRead.length==1){rMgr.setRegister(ResourceManager.REG_A,(rMgr.getRegister(ResourceManager.REG_A)&0xFFFF00)|(dataRead[0]&0xFF));lastExecutedInstructionInfo+=String.format(" (Dev '%s').A_b3<-0x%02X",devName,dataRead[0]&0xFF);}else{rMgr.setRegister(ResourceManager.REG_A,(rMgr.getRegister(ResourceManager.REG_A)&0xFFFF00));lastExecutedInstructionInfo+=String.format(" (Dev '%s').ReadFail/EOF.A_b3<-00",devName);/*EOF시 A의 최하위 바이트를 00으로 설정*/}return pc+l;}
-    private int handleWD(int pc, byte[] iB, int l, int oF) {TargetAddressInfo taInfo=calculateTargetAddress(pc,iB,l,oF);if(taInfo==null||taInfo.isImmediate){lastErrorMessage="WD: Invalid TA";return ERROR_HALT;} if(taInfo.address<0||taInfo.address>=rMgr.memory.length){lastErrorMessage="WD: Mem OOB for DeviceID";return ERROR_HALT;} byte devId=rMgr.getMemoryBytes(taInfo.address,1)[0];String devName=String.format("%02X",devId&0xFF);char charToWrite=(char)(rMgr.getRegister(ResourceManager.REG_A)&0xFF);rMgr.writeDevice(devName,new char[]{charToWrite},1);lastExecutedInstructionInfo+=String.format(" (Dev '%s').Write A_b3(0x%02X)",devName,charToWrite&0xFF);return pc+l;}
+    private int handleRD(int pc, byte[] iB, int l, int oF) {TargetAddressInfo taInfo=calculateTargetAddress(pc,iB,l,oF);if(taInfo==null||taInfo.isImmediate){lastErrorMessage="RD: Invalid TA";return ERROR_HALT;} if(taInfo.address<0||taInfo.address>=rMgr.memory.length){lastErrorMessage="RD: Mem OOB for DeviceID";return ERROR_HALT;} byte devId=rMgr.getMemory(taInfo.address,1)[0];String devName=String.format("%02X",devId&0xFF);char[]dataRead=rMgr.readDevice(devName,1);if(dataRead!=null&&dataRead.length==1){rMgr.setRegister(ResourceManager.REG_A,(rMgr.getRegister(ResourceManager.REG_A)&0xFFFF00)|(dataRead[0]&0xFF));lastExecutedInstructionInfo+=String.format(" (Dev '%s').A_b3<-0x%02X",devName,dataRead[0]&0xFF);}else{rMgr.setRegister(ResourceManager.REG_A,(rMgr.getRegister(ResourceManager.REG_A)&0xFFFF00));lastExecutedInstructionInfo+=String.format(" (Dev '%s').ReadFail/EOF.A_b3<-00",devName);/*EOF시 A의 최하위 바이트를 00으로 설정*/}return pc+l;}
+    private int handleWD(int pc, byte[] iB, int l, int oF) {TargetAddressInfo taInfo=calculateTargetAddress(pc,iB,l,oF);if(taInfo==null||taInfo.isImmediate){lastErrorMessage="WD: Invalid TA";return ERROR_HALT;} if(taInfo.address<0||taInfo.address>=rMgr.memory.length){lastErrorMessage="WD: Mem OOB for DeviceID";return ERROR_HALT;} byte devId=rMgr.getMemory(taInfo.address,1)[0];String devName=String.format("%02X",devId&0xFF);char charToWrite=(char)(rMgr.getRegister(ResourceManager.REG_A)&0xFF);rMgr.writeDevice(devName,new char[]{charToWrite},1);lastExecutedInstructionInfo+=String.format(" (Dev '%s').Write A_b3(0x%02X)",devName,charToWrite&0xFF);return pc+l;}
     private int handleCOMPR(int pc, byte[] iB, int l, int oF) { if(l!=2){lastErrorMessage="COMPR: Invalid length "+l;return ERROR_HALT;} int r1n=(iB[1]&0xF0)>>4; int r2n=iB[1]&0x0F; if(r1n>9||r1n==6||r1n==7||r2n>9||r2n==6||r2n==7){lastErrorMessage="COMPR: Invalid reg num";return ERROR_HALT;}int val1=rMgr.getRegister(r1n); int val2=rMgr.getRegister(r2n); int compRes=Integer.compare(val1,val2); setConditionCode(compRes); lastExecutedInstructionInfo+=String.format("r%d,r%d ; Comp r%d(0x%X)w r%d(0x%X).CC=%s",r1n,r2n,r1n,val1&0xFFFFFF,r2n,val2&0xFFFFFF,getCCString()); return pc+l; }
     private int handleCLEAR(int pc, byte[] iB, int l, int oF) { if(l!=2){lastErrorMessage="CLEAR: Invalid length "+l;return ERROR_HALT;} int r1n=(iB[1]&0xF0)>>4; if(r1n>9||r1n==6||r1n==7){lastErrorMessage="CLEAR: Invalid reg num "+r1n;return ERROR_HALT;} rMgr.setRegister(r1n,0); lastExecutedInstructionInfo=String.format("r%d ; r%d<-0",r1n,r1n); return pc+l; }
     private int handleTIXR(int pc, byte[] iB, int l, int oF) { if(l!=2){lastErrorMessage="TIXR: Invalid length "+l;return ERROR_HALT;} int r1n=(iB[1]&0xF0)>>4; if(r1n>9||r1n==6||r1n==7){lastErrorMessage="TIXR: Invalid reg num "+r1n;return ERROR_HALT;} rMgr.setRegister(ResourceManager.REG_X,(rMgr.getRegister(ResourceManager.REG_X)+1)&0xFFFFFF); int valX=rMgr.getRegister(ResourceManager.REG_X); int valR1=rMgr.getRegister(r1n); int compRes=Integer.compare(valX,valR1); setConditionCode(compRes); lastExecutedInstructionInfo+=String.format("r%d ; X<-X+1(0x%06X).Comp X w r%d(0x%06X).CC=%s",r1n,valX&0xFFFFFF,r1n,valR1&0xFFFFFF,getCCString()); return pc+l; }
@@ -446,11 +446,11 @@ public class InstLuncher {
 
     public byte[] getCurrentInstructionBytes(int pc) {
         if (pc < 0 || pc >= rMgr.memory.length) return new byte[0];
-        byte[] firstByteArr = rMgr.getMemoryBytes(pc, 1);
+        byte[] firstByteArr = rMgr.getMemory(pc, 1);
         if (firstByteArr.length < 1) return new byte[0];
         int pureOpcode = (firstByteArr[0] & 0xFF) & 0xFC;
         int length = getInstructionLength(pureOpcode, pc);
         if (length == 0 || pc + length > rMgr.memory.length) return new byte[0];
-        return rMgr.getMemoryBytes(pc, length);
+        return rMgr.getMemory(pc, length);
     }
 }

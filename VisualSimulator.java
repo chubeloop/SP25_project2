@@ -106,7 +106,7 @@ public class VisualSimulator extends JFrame {
 	private void addListeners() { /* 이전과 동일 */
 		openButton.addActionListener(e -> {JFileChooser fc=new JFileChooser(".");fc.setDialogTitle("Open SIC/XE Object Code File");if(fc.showOpenDialog(VisualSimulator.this)==JFileChooser.APPROVE_OPTION){load(fc.getSelectedFile());}});
 		runOneStepButton.addActionListener(e -> oneStep()); runAllButton.addActionListener(e -> allStep());
-		exitButton.addActionListener(e -> {resourceManager.closeAllDevices();System.exit(0);});
+		exitButton.addActionListener(e -> {resourceManager.closeDevices();System.exit(0);});
 	}
 
 	public void load(File program) {
@@ -136,7 +136,7 @@ public class VisualSimulator extends JFrame {
 					instructionCodeArea.setText("(No T-records with content or T-regions not registered)");
 				} else {
 					for (MemoryRegion region : loadedRegions) {
-						byte[] regionMemoryBytes = resourceManager.getMemoryBytes(region.getStartAddress(), region.getLength());
+						byte[] regionMemoryBytes = resourceManager.getMemory(region.getStartAddress(), region.getLength());
 						if (regionMemoryBytes.length == 0) continue;
 
 						int currentOffsetInRegion = 0;

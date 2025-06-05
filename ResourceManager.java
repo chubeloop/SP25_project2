@@ -65,10 +65,10 @@ public class ResourceManager {
 		lastAccessedDeviceName = "";
 		if (estab != null) estab.clear(); else estab = new HashMap<>();
 		if (tRecordLoadedRegions != null) tRecordLoadedRegions.clear(); else tRecordLoadedRegions = new ArrayList<>();
-		closeAllDevices();
+		closeDevices();
 	}
 
-	public void closeAllDevices() {
+	public void closeDevices() {
 		for (RandomAccessFile raf : deviceManager.values()) {
 			try { if (raf != null) raf.close(); }
 			catch (IOException e) { System.err.println("Error closing device RAF: " + e.getMessage()); }
@@ -132,7 +132,7 @@ public class ResourceManager {
 		} catch (IOException e) { System.err.println("[ResourceManager.writeDevice] Error writing: " + e.getMessage()); }
 	}
 
-	public byte[] getMemoryBytes(int location, int num) {
+	public byte[] getMemory(int location, int num) {
 		if (location < 0 || num <= 0 || location + num > memory.length) {
 			return new byte[0];
 		}
@@ -141,7 +141,7 @@ public class ResourceManager {
 		return data;
 	}
 
-	public void setMemoryBytes(int location, byte[] data, int num) {
+	public void setMemory(int location, byte[] data, int num) {
 		if (location < 0 || data == null || num < 0 || location + num > memory.length || data.length < num) return;
 		System.arraycopy(data, 0, memory, location, num);
 	}
