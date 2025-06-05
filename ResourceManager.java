@@ -168,7 +168,7 @@ public class ResourceManager {
 	public double getRegister_F() { return this.register_F; }
 	public void setRegister_F(double value) { this.register_F = value; }
 	public byte[] intToBytes(int data) { byte[]r=new byte[3];r[0]=(byte)((data>>16)&0xFF);r[1]=(byte)((data>>8)&0xFF);r[2]=(byte)(data&0xFF);return r;}
-	public int bytesToInt(byte[] data) {
+	public int byteToInt(byte[] data) {
 		if(data==null||data.length==0)return 0; int v=0; for(int i=0;i<data.length;i++)v=(v<<8)|(data[i]&0xFF);
 		if(data.length==3&&(data[0]&0x80)!=0)v|=0xFF000000; else if(data.length==1&&(data[0]&0x80)!=0)v|=0xFFFFFF00; return v;
 	}
@@ -190,5 +190,16 @@ public class ResourceManager {
 	}
 	public List<MemoryRegion> getTRecordLoadedRegions() {
 		return new ArrayList<>(this.tRecordLoadedRegions); // 방어적 복사
+	}
+
+	public char[] intToChar(int data) {
+		char[] result = new char[3];
+		// data의 상위 8비트 (가장 왼쪽 바이트)
+		result[0] = (char) ((data >> 16) & 0xFF);
+		// data의 중간 8비트
+		result[1] = (char) ((data >> 8) & 0xFF);
+		// data의 하위 8비트 (가장 오른쪽 바이트)
+		result[2] = (char) (data & 0xFF);
+		return result;
 	}
 }

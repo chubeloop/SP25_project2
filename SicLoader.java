@@ -21,8 +21,12 @@ public class SicLoader {
 
 	public SicLoader(ResourceManager resourceManager) {
 		if (resourceManager == null) throw new IllegalArgumentException("RM cannot be null for SicLoader.");
-		this.rMgr = resourceManager;
+		setResourceManager(resourceManager);
 		this.modificationRecordsBuffer = new ArrayList<>();
+	}
+
+	public void setResourceManager(ResourceManager resourceManager) {
+		this.rMgr = resourceManager;
 	}
 
 	public void load(File objectCodeFile) {

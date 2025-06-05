@@ -302,7 +302,7 @@ public class InstLuncher {
                 lastErrorMessage = "TA calc error: Indirect pointer 0x" + String.format("%06X", finalAddress) + " out of bounds."; return null;
             }
             byte[] indirectPointerBytes = rMgr.getMemory(finalAddress, 3);
-            finalAddress = rMgr.bytesToInt(indirectPointerBytes);
+            finalAddress = rMgr.byteToInt(indirectPointerBytes);
             effectiveAddressLog = String.format(" -> TA_ptr=0x%06X, M[TA_ptr]=0x%06X", targetAddressOperand & 0xFFFFFF, finalAddress & 0xFFFFFF);
         }
 
@@ -328,7 +328,7 @@ public class InstLuncher {
             lastErrorMessage="Memory Read OutOfBounds: addr=0x"+String.format("%06X",address)+", len="+length;
             return 0;
         }
-        return rMgr.bytesToInt(rMgr.getMemory(address,length));
+        return rMgr.byteToInt(rMgr.getMemory(address,length));
     }
 
     private void intToMemBytes(int address, int value, int length) {
